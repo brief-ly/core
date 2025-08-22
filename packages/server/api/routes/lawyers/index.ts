@@ -2,11 +2,9 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
 import { respond } from "@/api/lib/utils/respond";
-import { type Address } from "viem";
 import ensureUser from "@/api/lib/middlewares/ensureUser";
 import ensureAdmin from "@/api/lib/middlewares/ensureAdmin";
 import { db } from "@/api/lib/data/db";
-import { env } from "@/env";
 import { Agent } from "@/agent";
 
 export default new Hono()
@@ -528,6 +526,193 @@ export default new Hono()
       } catch (error) {
         console.error("Error updating lawyer profile:", error);
         return respond.err(ctx, "Failed to update lawyer profile", 500);
+      }
+    }
+  )
+  .post(
+    "/search",
+    zValidator(
+      "json",
+      z.object({
+        currentSituation: z
+          .string()
+          .min(10, "Current situation must be at least 10 characters"),
+        futurePlans: z
+          .string()
+          .min(10, "Future plans must be at least 10 characters"),
+      })
+    ),
+    async (ctx) => {
+      try {
+        const { currentSituation, futurePlans } = ctx.req.valid("json");
+
+        const verifiedLawyers = db
+          .query(
+            `
+            SELECT 
+              la.*,
+              GROUP_CONCAT(DISTINCT lj.jurisdiction) as jurisdictions,
+              GROUP_CONCAT(DISTINCT ll.label) as labels
+            FROM lawyer_accounts la
+            LEFT JOIN lawyer_jurisdictions lj ON la.account = lj.account
+            LEFT JOIN lawyer_labels ll ON la.account = ll.account
+            WHERE la.verified_at IS NOT NULL
+            GROUP BY la.account
+            ORDER BY la.verified_at DESC
+          `
+          )
+          .all() as any[];
+
+        if (verifiedLawyers.length === 0) {
+          return respond.ok(
+            ctx,
+            {
+              groups: [],
+              totalLawyers: 0,
+            },
+            "No verified lawyers found",
+            200
+          );
+        }
+
+        const formattedLawyers = verifiedLawyers.map((lawyer) => ({
+          accountId: lawyer.account,
+          name: lawyer.name,
+          photoUrl: lawyer.photo_url,
+          bio: lawyer.bio,
+          expertise: lawyer.expertise,
+          jurisdictions: lawyer.jurisdictions
+            ? lawyer.jurisdictions.split(",")
+            : [],
+          labels: lawyer.labels ? lawyer.labels.split(",") : [],
+          consultationFee: lawyer.consultation_fee,
+          verifiedAt: lawyer.verified_at,
+        }));
+
+        const agent = new Agent({
+          preamble: `You are an expert legal matching system. Your task is to analyze a client's current legal situation and future plans, then group lawyers into optimal teams of 1-5 lawyers that can best address their needs.
+
+          Consider:
+          - Lawyers' expertise areas and specializations
+          - Jurisdictions they practice in
+          - Labels that indicate their practice areas
+          - How well they match the client's current and future needs
+          - Complementary skills within each group
+
+          Create multiple groups where each group represents a different approach or combination of lawyers that could help the client. Some groups might focus on immediate needs, others on long-term planning, and some might offer comprehensive coverage.
+
+          Return groups ordered by relevance, with the most suitable combinations first.`,
+          model: "gemini-2.0-flash",
+        });
+
+        agent.setResponseJsonSchema({
+          type: "object",
+          properties: {
+            groups: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  groupName: {
+                    type: "string",
+                    description: "A descriptive name for this group of lawyers",
+                  },
+                  reasoning: {
+                    type: "string",
+                    description:
+                      "Why this group was formed and how they address the client's needs",
+                  },
+                  lawyers: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        accountId: { type: "string" },
+                        relevanceScore: {
+                          type: "number",
+                          minimum: 0,
+                          maximum: 10,
+                          description:
+                            "How relevant this lawyer is to the client's needs (0-10)",
+                        },
+                        roleInGroup: {
+                          type: "string",
+                          description:
+                            "This lawyer's specific role or contribution to addressing the client's needs",
+                        },
+                      },
+                      required: ["accountId", "relevanceScore", "roleInGroup"],
+                    },
+                    minItems: 1,
+                    maxItems: 5,
+                  },
+                },
+                required: ["groupName", "reasoning", "lawyers"],
+              },
+            },
+          },
+          required: ["groups"],
+        });
+
+        const lawyersData = formattedLawyers
+          .map((lawyer) =>
+            `
+Account ID: ${lawyer.accountId}
+Name: ${lawyer.name}
+Bio: ${lawyer.bio}
+Expertise: ${lawyer.expertise}
+Jurisdictions: ${lawyer.jurisdictions.join(", ")}
+Labels: ${lawyer.labels.join(", ")}
+Consultation Fee: $${lawyer.consultationFee}
+        `.trim()
+          )
+          .join("\n\n---\n\n");
+
+        const searchPrompt = `
+Client's Current Situation:
+${currentSituation}
+
+Client's Future Plans:
+${futurePlans}
+
+Available Lawyers:
+${lawyersData}
+
+Please create optimal groups of lawyers (1-5 per group) that can best address this client's current situation and future legal needs. Focus on creating practical, effective combinations.
+        `.trim();
+
+        const result = await agent.prompt(searchPrompt);
+
+        const enrichedGroups =
+          result.groups?.map((group: any) => ({
+            ...group,
+            lawyers: group.lawyers?.map((lawyer: any) => {
+              const fullLawyerData = formattedLawyers.find(
+                (l) => l.accountId === lawyer.accountId
+              );
+              return {
+                ...lawyer,
+                ...fullLawyerData,
+              };
+            }),
+          })) || [];
+
+        return respond.ok(
+          ctx,
+          {
+            groups: enrichedGroups,
+            totalLawyers: formattedLawyers.length,
+            query: {
+              currentSituation,
+              futurePlans,
+            },
+          },
+          "Lawyer search completed successfully",
+          200
+        );
+      } catch (error) {
+        console.error("Error searching lawyers:", error);
+        return respond.err(ctx, "Failed to search lawyers", 500);
       }
     }
   );
