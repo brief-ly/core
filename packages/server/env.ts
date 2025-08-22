@@ -4,9 +4,9 @@ const envKeys = [
   "JWT_SECRET",
   "DB_URI",
   "PORT",
-  "PRIVY_APP_ID",
   "PRIVY_APP_SECRET",
   "ADMIN_SECRET",
+  "BUN_PUBLIC_PRIVY_APP_ID",
   "PVT_KEY",
 ] as const;
 
