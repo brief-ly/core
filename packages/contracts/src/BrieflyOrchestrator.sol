@@ -10,9 +10,10 @@ contract BrieflyOrchestrator {
     IERC20 public busd;
     uint256 public constant ONE_BUSD = 1e18;
 
-    constructor(address busd) {
+    constructor(address busdAddress) {
         server = msg.sender;
         lawyerIdentity = new BrieflyLawyerIdentity();
-        busd = IERC20(busd);
+        lawyerIdentity.setOrchestrator(address(this));
+        busd = IERC20(busdAddress);
     }
 }

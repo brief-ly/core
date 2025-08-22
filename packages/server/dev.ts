@@ -1,8 +1,10 @@
 import hono from "./api";
+import { db, runMigrations } from "./api/lib/data/db";
 import html from "./src/index.html";
-import { serve } from "bun";
 
-const server = serve({
+await runMigrations();
+
+const server = Bun.serve({
   development: {
     hmr: true,
     console: true,
@@ -11,10 +13,12 @@ const server = serve({
   idleTimeout: 60,
 
   routes: {
-    "/api": new Response(JSON.stringify({
-      message: "Bun Server",
-      version: "v1.0.0",
-    })),
+    "/api": new Response(
+      JSON.stringify({
+        message: "Bun Server",
+        version: "v1.0.0",
+      })
+    ),
     // CATCHES ONLY GET REQUESTS
     "/api/v1/*": (req) => {
       return hono.fetch(req);

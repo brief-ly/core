@@ -1,15 +1,15 @@
 import * as viem from "viem";
-import { hardhat, seiTestnet } from "viem/chains";
+import { hardhat, bscTestnet } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
 
-import CaretOrchestrator from "../artifacts/src/CaretOrchestrator.sol/CaretOrchestrator.json";
-import CaretEscrow from "../artifacts/src/CaretEscrow.sol/CaretEscrow.json";
-import USDT from "../artifacts/src/usdt.sol/USDT.json";
-import TestToken from "../artifacts/src/TestToken.sol/TestToken.json";
-import { tokens } from "../../src/bot/tokens";
+import BrieflyOrchestrator from "../artifacts/src/BrieflyOrchestrator.sol/BrieflyOrchestrator.json";
+import BrieflyLawyerIdentity from "../artifacts/src/BrieflyLawyerIdentity.sol/BrieflyLawyerIdentity.json";
+import TestBUSD from "../artifacts/src/TestBUSD.sol/TestBUSD.json";
+import AuxillaryList from "../artifacts/src/AuxillaryList.sol/AuxillaryList.json";
+import SignatureVerifier from "../artifacts/src/SignatureVerifier.sol/SignatureVerifier.json";
 
 const networkArg = Bun.argv[2];
-const isSei = networkArg === "sei";
+const isBscTestnet = networkArg === "bsc-testnet";
 
 const privateKey = Bun.env.PRIVATE_KEY_1;
 if (!privateKey || !viem.isHex(privateKey)) {
@@ -17,12 +17,12 @@ if (!privateKey || !viem.isHex(privateKey)) {
 }
 
 const getChain = () => {
-  if (isSei) return seiTestnet;
+  if (isBscTestnet) return bscTestnet;
   return hardhat;
 };
 
 const getAccount = () => {
-  if (isSei) return privateKeyToAccount(privateKey);
+  if (isBscTestnet) return privateKeyToAccount(privateKey);
 
   return privateKeyToAccount(
     "0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e"
@@ -38,62 +38,65 @@ const client = viem
   .extend(viem.publicActions);
 
 const definitions: {
-  CaretOrchestrator?: {
+  BrieflyOrchestrator?: {
     abi: any;
     address?: viem.Address;
   };
-  CaretEscrow?: {
+  BrieflyLawyerIdentity?: {
     abi: any;
     address?: viem.Address;
   };
-  USDT?: {
+  TestBUSD?: {
     abi: any;
     address?: viem.Address;
   };
-  tokens?: Record<
-    string,
-    {
-      abi: any;
-      address: viem.Address;
-    }
-  >;
+  AuxillaryList?: {
+    abi: any;
+    address?: viem.Address;
+  };
+  SignatureVerifier?: {
+    abi: any;
+    address?: viem.Address;
+  };
 } = {};
 
 async function main() {
   console.log(`Deploying to ${getChain().name}...`);
   console.log(`Deployer address: ${client.account.address}`);
 
-  if (!viem.isHex(CaretOrchestrator.bytecode))
-    throw new Error("CaretOrchestrator bytecode is missing or invalid");
+  if (!viem.isHex(TestBUSD.bytecode))
+    throw new Error("TestBUSD bytecode is missing or invalid");
 
-  if (!viem.isHex(USDT.bytecode))
-    throw new Error("USDT bytecode is missing or invalid");
+  if (!viem.isHex(BrieflyOrchestrator.bytecode))
+    throw new Error("BrieflyOrchestrator bytecode is missing or invalid");
 
-  if (!viem.isHex(TestToken.bytecode))
-    throw new Error("TestToken bytecode is missing or invalid");
+  if (!viem.isHex(AuxillaryList.bytecode))
+    throw new Error("AuxillaryList bytecode is missing or invalid");
 
-  const serverAddress = client.account.address;
+  if (!viem.isHex(SignatureVerifier.bytecode))
+    throw new Error("SignatureVerifier bytecode is missing or invalid");
 
-  console.log("Deploying USDT...");
-  const usdtHash = await client.deployContract({
-    abi: USDT.abi,
-    bytecode: USDT.bytecode,
+  console.log("Deploying TestBUSD...");
+  const busdHash = await client.deployContract({
+    abi: TestBUSD.abi,
+    bytecode: TestBUSD.bytecode,
     args: [],
   });
 
-  const usdtReceipt = await client.waitForTransactionReceipt({
-    hash: usdtHash,
+  const busdReceipt = await client.waitForTransactionReceipt({
+    hash: busdHash,
   });
 
-  if (!usdtReceipt.contractAddress) throw new Error("USDT deployment failed");
+  if (!busdReceipt.contractAddress)
+    throw new Error("TestBUSD deployment failed");
 
-  console.log(`USDT deployed at: ${usdtReceipt.contractAddress}`);
+  console.log(`TestBUSD deployed at: ${busdReceipt.contractAddress}`);
 
-  console.log("Deploying CaretOrchestrator...");
+  console.log("Deploying BrieflyOrchestrator...");
   const orchestratorHash = await client.deployContract({
-    abi: CaretOrchestrator.abi,
-    bytecode: CaretOrchestrator.bytecode,
-    args: [serverAddress, usdtReceipt.contractAddress],
+    abi: BrieflyOrchestrator.abi,
+    bytecode: BrieflyOrchestrator.bytecode,
+    args: [busdReceipt.contractAddress],
   });
 
   const orchestratorReceipt = await client.waitForTransactionReceipt({
@@ -101,74 +104,90 @@ async function main() {
   });
 
   if (!orchestratorReceipt.contractAddress)
-    throw new Error("CaretOrchestrator deployment failed");
+    throw new Error("BrieflyOrchestrator deployment failed");
 
   console.log(
-    `CaretOrchestrator deployed at: ${orchestratorReceipt.contractAddress}`
+    `BrieflyOrchestrator deployed at: ${orchestratorReceipt.contractAddress}`
   );
 
-  console.log("\nDeploying test tokens...");
-  const testTokens: Record<
-    string,
-    {
-      abi: any;
-      address: viem.Address;
-    }
-  > = {};
+  console.log("Deploying AuxillaryList...");
+  const auxillaryListHash = await client.deployContract({
+    abi: AuxillaryList.abi,
+    bytecode: AuxillaryList.bytecode,
+    args: [],
+  });
 
-  for (const token of tokens) {
-    const testTokenName = `Test ${token.name}`;
-    const testTokenSymbol = token.symbol;
+  const auxillaryListReceipt = await client.waitForTransactionReceipt({
+    hash: auxillaryListHash,
+  });
 
-    console.log(`Deploying ${testTokenName} (${testTokenSymbol})...`);
+  if (!auxillaryListReceipt.contractAddress)
+    throw new Error("AuxillaryList deployment failed");
 
-    const tokenHash = await client.deployContract({
-      abi: TestToken.abi,
-      bytecode: TestToken.bytecode,
-      args: [testTokenName, testTokenSymbol, usdtReceipt.contractAddress],
-    });
+  console.log(
+    `AuxillaryList deployed at: ${auxillaryListReceipt.contractAddress}`
+  );
 
-    const tokenReceipt = await client.waitForTransactionReceipt({
-      hash: tokenHash,
-    });
+  console.log("Deploying SignatureVerifier...");
+  const signatureVerifierHash = await client.deployContract({
+    abi: SignatureVerifier.abi,
+    bytecode: SignatureVerifier.bytecode,
+    args: [],
+  });
 
-    if (!tokenReceipt.contractAddress)
-      throw new Error(`${testTokenSymbol} deployment failed`);
+  const signatureVerifierReceipt = await client.waitForTransactionReceipt({
+    hash: signatureVerifierHash,
+  });
 
-    console.log(
-      `${testTokenSymbol} deployed at: ${tokenReceipt.contractAddress}`
-    );
+  if (!signatureVerifierReceipt.contractAddress)
+    throw new Error("SignatureVerifier deployment failed");
 
-    testTokens[testTokenSymbol] = {
-      abi: TestToken.abi,
-      address: tokenReceipt.contractAddress,
-    };
-  }
+  console.log(
+    `SignatureVerifier deployed at: ${signatureVerifierReceipt.contractAddress}`
+  );
 
-  definitions["CaretOrchestrator"] = {
-    abi: CaretOrchestrator.abi,
+  const lawyerIdentityAddress = await client.readContract({
+    address: orchestratorReceipt.contractAddress,
+    abi: BrieflyOrchestrator.abi,
+    functionName: "lawyerIdentity",
+  });
+
+  console.log(`BrieflyLawyerIdentity deployed at: ${lawyerIdentityAddress}`);
+
+  definitions["BrieflyOrchestrator"] = {
+    abi: BrieflyOrchestrator.abi,
     address: orchestratorReceipt.contractAddress,
   };
 
-  definitions["CaretEscrow"] = {
-    abi: CaretEscrow.abi,
+  definitions["BrieflyLawyerIdentity"] = {
+    abi: BrieflyLawyerIdentity.abi,
+    address: lawyerIdentityAddress as viem.Address,
   };
 
-  definitions["USDT"] = {
-    abi: USDT.abi,
-    address: usdtReceipt.contractAddress,
+  definitions["TestBUSD"] = {
+    abi: TestBUSD.abi,
+    address: busdReceipt.contractAddress,
   };
 
-  definitions.tokens = testTokens;
+  definitions["AuxillaryList"] = {
+    abi: AuxillaryList.abi,
+    address: auxillaryListReceipt.contractAddress,
+  };
+
+  definitions["SignatureVerifier"] = {
+    abi: SignatureVerifier.abi,
+    address: signatureVerifierReceipt.contractAddress,
+  };
 
   console.log("\nDeployment Summary:");
   console.log("===================");
-  console.log(`USDT: ${usdtReceipt.contractAddress}`);
-  console.log(`CaretOrchestrator: ${orchestratorReceipt.contractAddress}`);
-  console.log(`Server address: ${serverAddress}`);
-  console.log(`Test Tokens deployed: ${Object.keys(testTokens).length}`);
+  console.log(`TestBUSD: ${busdReceipt.contractAddress}`);
+  console.log(`BrieflyOrchestrator: ${orchestratorReceipt.contractAddress}`);
+  console.log(`BrieflyLawyerIdentity: ${lawyerIdentityAddress}`);
+  console.log(`AuxillaryList: ${auxillaryListReceipt.contractAddress}`);
+  console.log(`SignatureVerifier: ${signatureVerifierReceipt.contractAddress}`);
+  console.log(`Server address: ${client.account.address}`);
 }
-
 main()
   .then(async () => {
     await Bun.write(
@@ -184,6 +203,8 @@ main()
     );
 
     console.log("\nDeployment successful! Contract definitions written to:");
+    console.log("- definitions.json");
+    console.log("- definitions.ts");
   })
   .catch((error) => {
     console.error("Deployment failed:", error);

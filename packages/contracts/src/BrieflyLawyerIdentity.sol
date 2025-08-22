@@ -2,9 +2,13 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import "./BrieflyOrchestrator.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract BrieflyLawyerIdentity is ERC721 {
+interface IBrieflyOrchestrator {
+    function server() external view returns (address);
+}
+
+contract BrieflyLawyerIdentity is ERC721, Ownable {
     uint256 private _tokenIdCounter;
     string private _baseTokenURI;
 
@@ -19,7 +23,7 @@ contract BrieflyLawyerIdentity is ERC721 {
 
     modifier onlyServer() {
         require(
-            msg.sender == BrieflyOrchestrator(orchestrator).server(),
+            msg.sender == IBrieflyOrchestrator(orchestrator).server(),
             "Not authorized"
         );
         _;
@@ -29,6 +33,10 @@ contract BrieflyLawyerIdentity is ERC721 {
         ERC721("Briefly Identity | Lawyer", "BrID")
         Ownable(msg.sender)
     {}
+
+    function setOrchestrator(address _orchestrator) external onlyOwner {
+        orchestrator = _orchestrator;
+    }
 
     function setBaseURI(string memory newBaseURI) external onlyServer {
         string memory prev = _baseTokenURI;
