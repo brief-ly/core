@@ -531,6 +531,7 @@ export default new Hono()
   )
   .post(
     "/search",
+    ensureUser,
     zValidator(
       "json",
       z.object({
