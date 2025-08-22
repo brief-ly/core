@@ -1,0 +1,38 @@
+{
+  "name": "bnb",
+  "version": "0.0.1",
+  "contributors": [
+    {
+      "name": "Spandan Barve",
+      "url": "https://github.com/marsian83"
+    },
+    {
+      "name": "Riya Jain",
+      "url": "https://github.com/jriyyya"
+    },
+    {
+      "name": "Kartikay Tiwari",
+      "url": "https://github.com/ishtails"
+    }
+  ],
+  "scripts": {
+    "test-all": "python3 services/test/conductor.py",
+    "server:build": "cd packages/server && bun run build",
+    "server:start": "cd packages/server && bun run start"
+  },
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node-rsa": "^1.1.4"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "module": "index.ts",
+  "type": "module",
+  "dependencies": {
+  }
+}
