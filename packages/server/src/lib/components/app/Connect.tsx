@@ -2,6 +2,7 @@ import { useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useChainId, useSwitchChain } from "wagmi";
 import { hardhat, mainnet } from "viem/chains";
+import { useNavigate } from "@tanstack/react-router";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,6 +23,7 @@ import { truncateAddress } from "../../utils";
 export function Connect() {
   const { theme, setTheme } = useTheme();
   const [isOpen, setIsOpen] = useState(false);
+  const navigate = useNavigate();
 
   const isProd = process.env.NODE_ENV === "production";
   const correctChainId = isProd ? mainnet.id : hardhat.id;
@@ -109,6 +111,11 @@ export function Connect() {
   const handleDocumentationClick = () => {
     // Navigate to documentation page
     console.log("Documentation clicked");
+  };
+
+  const handleRegisterAsLawyer = () => {
+    navigate({ to: '/onboarding' });
+    setIsOpen(false);
   };
 
   // Loading state
@@ -201,6 +208,10 @@ export function Connect() {
           <DropdownMenuItem onClick={handleProfileClick}>
             <Icon name="User" className="mr-2 h-4 w-4" />
             <span>Profile</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={handleRegisterAsLawyer}>
+            <Icon name="Scale" className="mr-2 h-4 w-4" />
+            <span>Register as a lawyer</span>
           </DropdownMenuItem>
           <DropdownMenuItem onClick={handleSettingsClick}>
             <Icon name="Settings" className="mr-2 h-4 w-4" />

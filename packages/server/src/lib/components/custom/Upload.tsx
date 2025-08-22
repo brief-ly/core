@@ -32,7 +32,7 @@ export default function (props: IProps) {
   };
 
   return (
-    <div className="p-4 rounded-xl bg-card w-full max-w-sm">
+    <div className="rounded-xl bg-card w-full">
       <input
         type="file"
         onChange={handleFileSelect}
@@ -40,20 +40,22 @@ export default function (props: IProps) {
         id="fileInput"
         accept="image/*"
       />
+      <div className="relative mt-2">
+        {preview && (
+          <Image
+            src={preview}
+            alt="Preview"
+            className="rounded-sm my-4 mx-auto w-1/2 aspect-square object-contain"
+          />
+        )}
+      </div>
       <label
         htmlFor="fileInput"
-        className="block text-center py-2 border border-dashed border-primary/50 rounded-lg cursor-pointer hover:bg-background text-foreground/60 text-xs"
+        className="block text-center py-4 border border-dashed border-primary rounded-lg cursor-pointer hover:bg-background text-foreground/60 text-xs"
       >
         {file && <p>Click to change</p>}
         {file ? file.name : "Choose an image"}
       </label>
-      {preview && (
-        <Image
-          src={preview}
-          alt="Preview"
-          className="mt-2 mx-auto w-1/2 aspect-square object-contain rounded-lg"
-        />
-      )}
       {tempFile && (
         <Crop
           isOpen={showCropDialog}
@@ -63,6 +65,8 @@ export default function (props: IProps) {
           }}
           image={tempFile}
           onCrop={handleCrop}
+          allowedAspectRatios={['square']}
+          initialAspectRatio="square"
         />
       )}
     </div>

@@ -7,6 +7,7 @@ import {
 import { withPageErrorBoundary } from "@/src/lib/components/errors/PageErrorBoundary";
 import HomePage from "./home";
 import ProfilePage from "./profile";
+import OnboardingPage from "./onboarding";
 import { useAnalytics } from '../lib/hooks/use-analytics';
 
 const rootRoute = createRootRoute({
@@ -42,7 +43,15 @@ const profileRoute = createRoute({
   },
 })
 
-const routeTree = rootRoute.addChildren([indexRoute, profileRoute])
+const onboardingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/onboarding',
+  component: function Onboarding() {
+    return withPageErrorBoundary(OnboardingPage)({});
+  },
+})
+
+const routeTree = rootRoute.addChildren([indexRoute, profileRoute, onboardingRoute])
 const router = createRouter({
   routeTree,
 })

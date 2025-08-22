@@ -67,7 +67,7 @@ export default function HomePage() {
 
     return (
         <div className={cn(
-            "bg-gradient-to-b from-background via-primary/10 dark:via-primary/20 to-primary/20 dark:to-primary/30",
+            "bg-gradient-to-b from-background via-primary/10 dark:via-primary/10 to-primary/20 dark:to-primary/5",
             hasSearched ? "pb-16" : ""
         )}>
             <div className="relative">
