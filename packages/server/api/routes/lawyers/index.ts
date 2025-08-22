@@ -354,54 +354,6 @@ export default new Hono()
       return respond.err(ctx, "Failed to fetch verified lawyers", 500);
     }
   })
-  .get("/verified", async (ctx) => {
-    try {
-      const verifiedLawyers = db
-        .query(
-          `
-            SELECT 
-              la.*,
-              GROUP_CONCAT(DISTINCT lj.jurisdiction) as jurisdictions,
-              GROUP_CONCAT(DISTINCT ll.label) as labels
-            FROM lawyer_accounts la
-            LEFT JOIN lawyer_jurisdictions lj ON la.account = lj.account
-            LEFT JOIN lawyer_labels ll ON la.account = ll.account
-            WHERE la.verified_at IS NOT NULL
-            GROUP BY la.account
-            ORDER BY la.verified_at DESC
-          `
-        )
-        .all() as any[];
-
-      const formattedLawyers = verifiedLawyers.map((lawyer) => ({
-        accountId: lawyer.account,
-        name: lawyer.name,
-        photoUrl: lawyer.photo_url,
-        bio: lawyer.bio,
-        expertise: lawyer.expertise,
-        jurisdictions: lawyer.jurisdictions
-          ? lawyer.jurisdictions.split(",")
-          : [],
-        labels: lawyer.labels ? lawyer.labels.split(",") : [],
-        consultationFee: lawyer.consultation_fee,
-        nftTokenId: lawyer.nft_token_id,
-        verifiedAt: lawyer.verified_at,
-      }));
-
-      return respond.ok(
-        ctx,
-        {
-          lawyers: formattedLawyers,
-          total: formattedLawyers.length,
-        },
-        "Verified lawyers retrieved successfully",
-        200
-      );
-    } catch (error) {
-      console.error("Error fetching verified lawyers:", error);
-      return respond.err(ctx, "Failed to fetch verified lawyers", 500);
-    }
-  })
   .patch(
     "/profile",
     ensureUser,
@@ -576,7 +528,8 @@ export default new Hono()
           .min(10, "Current situation must be at least 10 characters"),
         futurePlans: z
           .string()
-          .min(10, "Future plans must be at least 10 characters"),
+          .min(10, "Future plans must be at least 10 characters")
+          .default("Future plans are according to current situation"),
       })
     ),
     async (ctx) => {

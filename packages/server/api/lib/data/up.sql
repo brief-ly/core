@@ -29,4 +29,44 @@ CREATE TABLE
     IF NOT EXISTS lawyer_labels (
         account INTEGER REFERENCES account (id) ON DELETE CASCADE ON UPDATE CASCADE,
         label TEXT NOT NULL
-    )
+    );
+
+CREATE TABLE
+    IF NOT EXISTS lawyer_groups (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        group_name TEXT NOT NULL,
+        reasoning TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+CREATE TABLE
+    IF NOT EXISTS lawyer_group_members (
+        group_id INTEGER REFERENCES lawyer_groups (id) ON DELETE CASCADE,
+        lawyer_account INTEGER REFERENCES account (id) ON DELETE CASCADE,
+        relevance_score REAL NOT NULL,
+        role_in_group TEXT NOT NULL,
+        PRIMARY KEY (group_id, lawyer_account)
+    );
+
+CREATE TABLE
+    IF NOT EXISTS group_requests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        requester_account INTEGER REFERENCES account (id) ON DELETE CASCADE,
+        group_id INTEGER REFERENCES lawyer_groups (id) ON DELETE CASCADE,
+        current_situation TEXT NOT NULL,
+        future_plans TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        expires_at TIMESTAMP NOT NULL,
+        completed_at TIMESTAMP
+    );
+
+CREATE TABLE
+    IF NOT EXISTS group_request_responses (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        request_id INTEGER REFERENCES group_requests (id) ON DELETE CASCADE,
+        lawyer_account INTEGER REFERENCES account (id) ON DELETE CASCADE,
+        response TEXT NOT NULL CHECK (response IN ('accepted', 'rejected')),
+        responded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (request_id, lawyer_account)
+    );
