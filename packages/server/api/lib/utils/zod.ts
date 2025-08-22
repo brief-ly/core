@@ -1,4 +1,6 @@
+import { isAddress, isHash } from "viem";
 import { z } from "zod";
+import type { Address, Hash } from "viem";
 
 export const zJsonString = () =>
   z
@@ -38,3 +40,15 @@ export const zDateString = () =>
       return false;
     }
   });
+
+export const zEvmAddress = () =>
+  z
+    .string()
+    .refine((value) => isAddress(value))
+    .transform((value) => value as Address);
+
+export const zHash = () =>
+  z
+    .string()
+    .refine((value) => isHash(value))
+    .transform((value) => value as Hash);
