@@ -4,9 +4,9 @@ const envKeys = [
   "JWT_SECRET",
   "DB_URI",
   "PORT",
-  "PRIVY_APP_ID",
   "PRIVY_APP_SECRET",
   "ADMIN_SECRET",
+  "BUN_PUBLIC_PRIVY_APP_ID",
 ] as const;
 
 type ENV = Record<(typeof envKeys)[number], string>;
