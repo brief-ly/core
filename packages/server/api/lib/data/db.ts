@@ -14,17 +14,19 @@ export const db = new Database(dbPath);
 
 export async function initializeDatabase() {
   try {
-    const tables = db.query("SELECT name FROM sqlite_master WHERE type='table'").all();
-    
+    const tables = db
+      .query("SELECT name FROM sqlite_master WHERE type='table'")
+      .all();
+
     if (tables.length === 0) {
       console.log("Initializing new database...");
-      
+
       const upSqlPath = join(import.meta.dir, "up.sql");
-      
+
       if (existsSync(upSqlPath)) {
         const upSqlFile = Bun.file(upSqlPath);
         const sqlContent = await upSqlFile.text();
-        
+
         if (sqlContent.trim()) {
           console.log("Running database migrations...");
           db.exec(sqlContent);
