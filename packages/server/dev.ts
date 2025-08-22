@@ -1,9 +1,12 @@
 import hono from "./api";
 import { db, runMigrations, initializeDatabase } from "./api/lib/data/db";
+import { startRequestExpirationJob } from "./api/lib/utils/requestJobs";
 import html from "./src/index.html";
 
 await initializeDatabase();
 await runMigrations();
+
+startRequestExpirationJob();
 
 const server = Bun.serve({
   development: {
