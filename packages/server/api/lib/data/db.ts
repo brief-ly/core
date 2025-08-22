@@ -1,8 +1,44 @@
 import { env } from "@/env";
 import { Database } from "bun:sqlite";
-import { join } from "path";
+import { join, dirname } from "path";
+import { existsSync, mkdirSync } from "fs";
 
-export const db = new Database(env.DB_URI);
+const dbPath = env.DB_URI;
+const dbDir = dirname(dbPath);
+
+if (!existsSync(dbDir)) {
+  mkdirSync(dbDir, { recursive: true });
+}
+
+export const db = new Database(dbPath);
+
+export async function initializeDatabase() {
+  try {
+    const tables = db.query("SELECT name FROM sqlite_master WHERE type='table'").all();
+    
+    if (tables.length === 0) {
+      console.log("Initializing new database...");
+      
+      const upSqlPath = join(import.meta.dir, "up.sql");
+      
+      if (existsSync(upSqlPath)) {
+        const upSqlFile = Bun.file(upSqlPath);
+        const sqlContent = await upSqlFile.text();
+        
+        if (sqlContent.trim()) {
+          console.log("Running database migrations...");
+          db.exec(sqlContent);
+          console.log("Database initialized successfully ✅");
+        }
+      } else {
+        console.log("No up.sql file found for initialization");
+      }
+    }
+  } catch (error) {
+    console.error("Failed to initialize database:", error);
+    throw error;
+  }
+}
 
 export async function runMigrations() {
   try {
