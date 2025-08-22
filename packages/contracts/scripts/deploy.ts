@@ -5,8 +5,6 @@ import { privateKeyToAccount } from "viem/accounts";
 import BrieflyOrchestrator from "../artifacts/src/BrieflyOrchestrator.sol/BrieflyOrchestrator.json";
 import BrieflyLawyerIdentity from "../artifacts/src/BrieflyLawyerIdentity.sol/BrieflyLawyerIdentity.json";
 import TestBUSD from "../artifacts/src/TestBUSD.sol/TestBUSD.json";
-import AuxillaryList from "../artifacts/src/AuxillaryList.sol/AuxillaryList.json";
-import SignatureVerifier from "../artifacts/src/SignatureVerifier.sol/SignatureVerifier.json";
 
 const networkArg = Bun.argv[2];
 const isBscTestnet = networkArg === "bsc-testnet";
@@ -50,14 +48,6 @@ const definitions: {
     abi: any;
     address?: viem.Address;
   };
-  AuxillaryList?: {
-    abi: any;
-    address?: viem.Address;
-  };
-  SignatureVerifier?: {
-    abi: any;
-    address?: viem.Address;
-  };
 } = {};
 
 async function main() {
@@ -69,12 +59,6 @@ async function main() {
 
   if (!viem.isHex(BrieflyOrchestrator.bytecode))
     throw new Error("BrieflyOrchestrator bytecode is missing or invalid");
-
-  if (!viem.isHex(AuxillaryList.bytecode))
-    throw new Error("AuxillaryList bytecode is missing or invalid");
-
-  if (!viem.isHex(SignatureVerifier.bytecode))
-    throw new Error("SignatureVerifier bytecode is missing or invalid");
 
   console.log("Deploying TestBUSD...");
   const busdHash = await client.deployContract({
@@ -110,42 +94,6 @@ async function main() {
     `BrieflyOrchestrator deployed at: ${orchestratorReceipt.contractAddress}`
   );
 
-  console.log("Deploying AuxillaryList...");
-  const auxillaryListHash = await client.deployContract({
-    abi: AuxillaryList.abi,
-    bytecode: AuxillaryList.bytecode,
-    args: [],
-  });
-
-  const auxillaryListReceipt = await client.waitForTransactionReceipt({
-    hash: auxillaryListHash,
-  });
-
-  if (!auxillaryListReceipt.contractAddress)
-    throw new Error("AuxillaryList deployment failed");
-
-  console.log(
-    `AuxillaryList deployed at: ${auxillaryListReceipt.contractAddress}`
-  );
-
-  console.log("Deploying SignatureVerifier...");
-  const signatureVerifierHash = await client.deployContract({
-    abi: SignatureVerifier.abi,
-    bytecode: SignatureVerifier.bytecode,
-    args: [],
-  });
-
-  const signatureVerifierReceipt = await client.waitForTransactionReceipt({
-    hash: signatureVerifierHash,
-  });
-
-  if (!signatureVerifierReceipt.contractAddress)
-    throw new Error("SignatureVerifier deployment failed");
-
-  console.log(
-    `SignatureVerifier deployed at: ${signatureVerifierReceipt.contractAddress}`
-  );
-
   const lawyerIdentityAddress = await client.readContract({
     address: orchestratorReceipt.contractAddress,
     abi: BrieflyOrchestrator.abi,
@@ -169,23 +117,11 @@ async function main() {
     address: busdReceipt.contractAddress,
   };
 
-  definitions["AuxillaryList"] = {
-    abi: AuxillaryList.abi,
-    address: auxillaryListReceipt.contractAddress,
-  };
-
-  definitions["SignatureVerifier"] = {
-    abi: SignatureVerifier.abi,
-    address: signatureVerifierReceipt.contractAddress,
-  };
-
   console.log("\nDeployment Summary:");
   console.log("===================");
   console.log(`TestBUSD: ${busdReceipt.contractAddress}`);
   console.log(`BrieflyOrchestrator: ${orchestratorReceipt.contractAddress}`);
   console.log(`BrieflyLawyerIdentity: ${lawyerIdentityAddress}`);
-  console.log(`AuxillaryList: ${auxillaryListReceipt.contractAddress}`);
-  console.log(`SignatureVerifier: ${signatureVerifierReceipt.contractAddress}`);
   console.log(`Server address: ${client.account.address}`);
 }
 main()

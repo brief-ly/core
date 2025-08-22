@@ -7,6 +7,7 @@ const envKeys = [
   "PRIVY_APP_SECRET",
   "ADMIN_SECRET",
   "BUN_PUBLIC_PRIVY_APP_ID",
+  "PVT_KEY",
 ] as const;
 
 type ENV = Record<(typeof envKeys)[number], string>;
