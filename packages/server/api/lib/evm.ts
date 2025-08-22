@@ -28,6 +28,14 @@ export const contracts = {
     });
   },
 
+  BrieflyEscrow(address: `0x${string}`) {
+    return viem.getContract({
+      client: evmClient,
+      abi: definitions.BrieflyEscrow.abi,
+      address,
+    });
+  },
+
   BrieflyLawyerIdentity() {
     return viem.getContract({
       client: evmClient,

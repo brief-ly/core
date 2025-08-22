@@ -3,6 +3,7 @@ import { hardhat, bscTestnet } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
 
 import BrieflyOrchestrator from "../artifacts/src/BrieflyOrchestrator.sol/BrieflyOrchestrator.json";
+import BrieflyEscrow from "../artifacts/src/BrieflyOrchestrator.sol/BrieflyEscrow.json";
 import BrieflyLawyerIdentity from "../artifacts/src/BrieflyLawyerIdentity.sol/BrieflyLawyerIdentity.json";
 import TestBUSD from "../artifacts/src/TestBUSD.sol/TestBUSD.json";
 
@@ -37,6 +38,10 @@ const client = viem
 
 const definitions: {
   BrieflyOrchestrator?: {
+    abi: any;
+    address?: viem.Address;
+  };
+  BrieflyEscrow?: {
     abi: any;
     address?: viem.Address;
   };
@@ -105,6 +110,10 @@ async function main() {
   definitions["BrieflyOrchestrator"] = {
     abi: BrieflyOrchestrator.abi,
     address: orchestratorReceipt.contractAddress,
+  };
+
+  definitions["BrieflyEscrow"] = {
+    abi: BrieflyEscrow.abi,
   };
 
   definitions["BrieflyLawyerIdentity"] = {
