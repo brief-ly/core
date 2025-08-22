@@ -1,7 +1,8 @@
 import hono from "./api";
-import { db, runMigrations } from "./api/lib/data/db";
+import { db, runMigrations, initializeDatabase } from "./api/lib/data/db";
 import html from "./src/index.html";
 
+await initializeDatabase();
 await runMigrations();
 
 const server = Bun.serve({

@@ -23,3 +23,9 @@ CREATE TABLE
         account INTEGER PRIMARY KEY REFERENCES account (id) ON DELETE CASCADE ON UPDATE CASCADE,
         jurisdiction TEXT NOT NULL
     );
+
+CREATE TABLE
+    IF NOT EXISTS lawyer_labels (
+        account INTEGER REFERENCES account (id) ON DELETE CASCADE ON UPDATE CASCADE,
+        label TEXT NOT NULL
+    )

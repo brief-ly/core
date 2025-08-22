@@ -4,8 +4,9 @@ import { serve } from "bun";
 import { existsSync, statSync } from "fs";
 import { getMimeType } from "./utils";
 import { env } from "./env";
-import { runMigrations } from "./api/lib/data/db";
+import { runMigrations, initializeDatabase } from "./api/lib/data/db";
 
+await initializeDatabase();
 await runMigrations();
 
 const server = serve({

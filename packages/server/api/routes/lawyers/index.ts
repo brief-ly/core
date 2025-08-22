@@ -2,11 +2,10 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
 import { respond } from "@/api/lib/utils/respond";
-import { type Address } from "viem";
 import ensureUser from "@/api/lib/middlewares/ensureUser";
 import ensureAdmin from "@/api/lib/middlewares/ensureAdmin";
 import { db } from "@/api/lib/data/db";
-import { env } from "@/env";
+import { Agent } from "@/agent";
 
 export default new Hono()
   .post(
@@ -99,9 +98,11 @@ export default new Hono()
           `
             SELECT 
               la.*,
-              GROUP_CONCAT(lj.jurisdiction) as jurisdictions
+              GROUP_CONCAT(DISTINCT lj.jurisdiction) as jurisdictions,
+              GROUP_CONCAT(DISTINCT ll.label) as labels
             FROM lawyer_accounts la
             LEFT JOIN lawyer_jurisdictions lj ON la.account = lj.account
+            LEFT JOIN lawyer_labels ll ON la.account = ll.account
             WHERE la.account = ?
             GROUP BY la.account
           `
@@ -116,6 +117,10 @@ export default new Hono()
         ? lawyerApplication.jurisdictions.split(",")
         : [];
 
+      const labels = lawyerApplication.labels
+        ? lawyerApplication.labels.split(",")
+        : [];
+
       return respond.ok(
         ctx,
         {
@@ -125,6 +130,7 @@ export default new Hono()
           bio: lawyerApplication.bio,
           expertise: lawyerApplication.expertise,
           jurisdictions,
+          labels,
           consultationFee: lawyerApplication.consultation_fee,
           verified: !!lawyerApplication.verified_at,
           submittedAt: lawyerApplication.created_at,
@@ -152,7 +158,18 @@ export default new Hono()
         const { accountId } = ctx.req.valid("json");
 
         const existingLawyer = db
-          .query("SELECT * FROM lawyer_accounts WHERE account = ? LIMIT 1")
+          .query(
+            `
+            SELECT 
+              la.*,
+              GROUP_CONCAT(lj.jurisdiction) as jurisdictions
+            FROM lawyer_accounts la
+            LEFT JOIN lawyer_jurisdictions lj ON la.account = lj.account
+            WHERE la.account = ?
+            GROUP BY la.account
+            LIMIT 1
+          `
+          )
           .get(accountId) as any;
 
         if (!existingLawyer) {
@@ -164,17 +181,48 @@ export default new Hono()
         }
 
         const currentTime = new Date().toISOString();
-        db.query(
-          "UPDATE lawyer_accounts SET verified_at = ? WHERE account = ?"
-        ).run(currentTime, accountId);
+
+        const jurisdictions = existingLawyer.jurisdictions
+          ? existingLawyer.jurisdictions.split(",")
+          : [];
+
+        const agent = new Agent({
+          preamble: "You are a legal categorization expert.",
+          model: "gemini-2.0-flash",
+        });
+
+        const labels = await agent.extractLawyerLabels({
+          name: existingLawyer.name,
+          bio: existingLawyer.bio,
+          expertise: existingLawyer.expertise,
+          jurisdictions,
+          consultationFee: existingLawyer.consultation_fee || 0,
+        });
+
+        db.transaction(() => {
+          db.query(
+            "UPDATE lawyer_accounts SET verified_at = ? WHERE account = ?"
+          ).run(currentTime, accountId);
+
+          db.query("DELETE FROM lawyer_labels WHERE account = ?").run(
+            accountId
+          );
+
+          for (const label of labels) {
+            db.query(
+              "INSERT INTO lawyer_labels (account, label) VALUES (?, ?)"
+            ).run(accountId, label);
+          }
+        })();
 
         return respond.ok(
           ctx,
           {
             accountId,
             approvedAt: currentTime,
+            generatedLabels: labels,
           },
-          "Lawyer application approved successfully",
+          "Lawyer application approved successfully with AI-generated labels",
           200
         );
       } catch (error) {
@@ -224,4 +272,448 @@ export default new Hono()
       console.error("Error fetching pending lawyer applications:", error);
       return respond.err(ctx, "Failed to fetch pending applications", 500);
     }
-  });
+  })
+  .get("/", async (ctx) => {
+    try {
+      const verifiedLawyers = db
+        .query(
+          `
+            SELECT 
+              la.*,
+              GROUP_CONCAT(DISTINCT lj.jurisdiction) as jurisdictions,
+              GROUP_CONCAT(DISTINCT ll.label) as labels
+            FROM lawyer_accounts la
+            LEFT JOIN lawyer_jurisdictions lj ON la.account = lj.account
+            LEFT JOIN lawyer_labels ll ON la.account = ll.account
+            WHERE la.verified_at IS NOT NULL
+            GROUP BY la.account
+            ORDER BY la.verified_at DESC
+          `
+        )
+        .all() as any[];
+
+      const formattedLawyers = verifiedLawyers.map((lawyer) => ({
+        accountId: lawyer.account,
+        name: lawyer.name,
+        photoUrl: lawyer.photo_url,
+        bio: lawyer.bio,
+        expertise: lawyer.expertise,
+        jurisdictions: lawyer.jurisdictions
+          ? lawyer.jurisdictions.split(",")
+          : [],
+        labels: lawyer.labels ? lawyer.labels.split(",") : [],
+        consultationFee: lawyer.consultation_fee,
+        verifiedAt: lawyer.verified_at,
+      }));
+
+      return respond.ok(
+        ctx,
+        {
+          lawyers: formattedLawyers,
+          total: formattedLawyers.length,
+        },
+        "Verified lawyers retrieved successfully",
+        200
+      );
+    } catch (error) {
+      console.error("Error fetching verified lawyers:", error);
+      return respond.err(ctx, "Failed to fetch verified lawyers", 500);
+    }
+  })
+  .get("/verified", async (ctx) => {
+    try {
+      const verifiedLawyers = db
+        .query(
+          `
+            SELECT 
+              la.*,
+              GROUP_CONCAT(DISTINCT lj.jurisdiction) as jurisdictions,
+              GROUP_CONCAT(DISTINCT ll.label) as labels
+            FROM lawyer_accounts la
+            LEFT JOIN lawyer_jurisdictions lj ON la.account = lj.account
+            LEFT JOIN lawyer_labels ll ON la.account = ll.account
+            WHERE la.verified_at IS NOT NULL
+            GROUP BY la.account
+            ORDER BY la.verified_at DESC
+          `
+        )
+        .all() as any[];
+
+      const formattedLawyers = verifiedLawyers.map((lawyer) => ({
+        accountId: lawyer.account,
+        name: lawyer.name,
+        photoUrl: lawyer.photo_url,
+        bio: lawyer.bio,
+        expertise: lawyer.expertise,
+        jurisdictions: lawyer.jurisdictions
+          ? lawyer.jurisdictions.split(",")
+          : [],
+        labels: lawyer.labels ? lawyer.labels.split(",") : [],
+        consultationFee: lawyer.consultation_fee,
+        verifiedAt: lawyer.verified_at,
+      }));
+
+      return respond.ok(
+        ctx,
+        {
+          lawyers: formattedLawyers,
+          total: formattedLawyers.length,
+        },
+        "Verified lawyers retrieved successfully",
+        200
+      );
+    } catch (error) {
+      console.error("Error fetching verified lawyers:", error);
+      return respond.err(ctx, "Failed to fetch verified lawyers", 500);
+    }
+  })
+  .patch(
+    "/profile",
+    ensureUser,
+    zValidator(
+      "json",
+      z.object({
+        photoUrl: z.string().url("Valid photo URL is required").optional(),
+        bio: z
+          .string()
+          .min(10, "Bio must be at least 10 characters")
+          .optional(),
+        expertise: z.string().min(1, "Expertise is required").optional(),
+        jurisdictions: z
+          .array(z.string())
+          .min(1, "At least one jurisdiction is required")
+          .optional(),
+        consultationFee: z
+          .number()
+          .min(0, "Consultation fee must be non-negative")
+          .optional(),
+      })
+    ),
+    async (ctx) => {
+      try {
+        const user = ctx.get("user");
+        const updateData = ctx.req.valid("json");
+
+        const existingLawyer = db
+          .query(
+            `
+            SELECT 
+              la.*,
+              GROUP_CONCAT(DISTINCT lj.jurisdiction) as jurisdictions,
+              GROUP_CONCAT(DISTINCT ll.label) as labels
+            FROM lawyer_accounts la
+            LEFT JOIN lawyer_jurisdictions lj ON la.account = lj.account
+            LEFT JOIN lawyer_labels ll ON la.account = ll.account
+            WHERE la.account = ? AND la.verified_at IS NOT NULL
+            GROUP BY la.account
+            LIMIT 1
+          `
+          )
+          .get(user.id) as any;
+
+        if (!existingLawyer) {
+          return respond.err(ctx, "Verified lawyer account not found", 404);
+        }
+
+        const currentJurisdictions = existingLawyer.jurisdictions
+          ? existingLawyer.jurisdictions.split(",")
+          : [];
+
+        const shouldRegenerateLabels =
+          updateData.bio !== undefined ||
+          updateData.expertise !== undefined ||
+          updateData.jurisdictions !== undefined;
+
+        const finalBio = updateData.bio ?? existingLawyer.bio;
+        const finalExpertise = updateData.expertise ?? existingLawyer.expertise;
+        const finalJurisdictions =
+          updateData.jurisdictions ?? currentJurisdictions;
+        const finalConsultationFee =
+          updateData.consultationFee ?? existingLawyer.consultation_fee;
+        const finalPhotoUrl = updateData.photoUrl ?? existingLawyer.photo_url;
+
+        let newLabels = existingLawyer.labels
+          ? existingLawyer.labels.split(",")
+          : [];
+
+        if (shouldRegenerateLabels) {
+          const agent = new Agent({
+            preamble: "You are a legal categorization expert.",
+            model: "gemini-2.0-flash",
+          });
+
+          newLabels = await agent.extractLawyerLabels({
+            name: existingLawyer.name,
+            bio: finalBio,
+            expertise: finalExpertise,
+            jurisdictions: finalJurisdictions,
+            consultationFee: finalConsultationFee,
+          });
+        }
+
+        db.transaction(() => {
+          const updates = [];
+          const values = [];
+
+          if (updateData.photoUrl !== undefined) {
+            updates.push("photo_url = ?");
+            values.push(updateData.photoUrl);
+          }
+          if (updateData.bio !== undefined) {
+            updates.push("bio = ?");
+            values.push(updateData.bio);
+          }
+          if (updateData.expertise !== undefined) {
+            updates.push("expertise = ?");
+            values.push(updateData.expertise);
+          }
+          if (updateData.consultationFee !== undefined) {
+            updates.push("consultation_fee = ?");
+            values.push(updateData.consultationFee);
+          }
+
+          if (updates.length > 0) {
+            values.push(user.id);
+            db.query(
+              `UPDATE lawyer_accounts SET ${updates.join(
+                ", "
+              )} WHERE account = ?`
+            ).run(...values);
+          }
+
+          if (updateData.jurisdictions !== undefined) {
+            db.query("DELETE FROM lawyer_jurisdictions WHERE account = ?").run(
+              user.id
+            );
+            for (const jurisdiction of updateData.jurisdictions) {
+              db.query(
+                "INSERT INTO lawyer_jurisdictions (account, jurisdiction) VALUES (?, ?)"
+              ).run(user.id, jurisdiction);
+            }
+          }
+
+          if (shouldRegenerateLabels) {
+            db.query("DELETE FROM lawyer_labels WHERE account = ?").run(
+              user.id
+            );
+            for (const label of newLabels) {
+              db.query(
+                "INSERT INTO lawyer_labels (account, label) VALUES (?, ?)"
+              ).run(user.id, label);
+            }
+          }
+        })();
+
+        return respond.ok(
+          ctx,
+          {
+            accountId: user.id,
+            name: existingLawyer.name,
+            photoUrl: finalPhotoUrl,
+            bio: finalBio,
+            expertise: finalExpertise,
+            jurisdictions: finalJurisdictions,
+            labels: newLabels,
+            consultationFee: finalConsultationFee,
+            verifiedAt: existingLawyer.verified_at,
+            labelsRegenerated: shouldRegenerateLabels,
+          },
+          shouldRegenerateLabels
+            ? "Profile updated successfully with regenerated labels"
+            : "Profile updated successfully",
+          200
+        );
+      } catch (error) {
+        console.error("Error updating lawyer profile:", error);
+        return respond.err(ctx, "Failed to update lawyer profile", 500);
+      }
+    }
+  )
+  .post(
+    "/search",
+    ensureUser,
+    zValidator(
+      "json",
+      z.object({
+        currentSituation: z
+          .string()
+          .min(10, "Current situation must be at least 10 characters"),
+        futurePlans: z
+          .string()
+          .min(10, "Future plans must be at least 10 characters"),
+      })
+    ),
+    async (ctx) => {
+      try {
+        const { currentSituation, futurePlans } = ctx.req.valid("json");
+
+        const verifiedLawyers = db
+          .query(
+            `
+            SELECT 
+              la.*,
+              GROUP_CONCAT(DISTINCT lj.jurisdiction) as jurisdictions,
+              GROUP_CONCAT(DISTINCT ll.label) as labels
+            FROM lawyer_accounts la
+            LEFT JOIN lawyer_jurisdictions lj ON la.account = lj.account
+            LEFT JOIN lawyer_labels ll ON la.account = ll.account
+            WHERE la.verified_at IS NOT NULL
+            GROUP BY la.account
+            ORDER BY la.verified_at DESC
+          `
+          )
+          .all() as any[];
+
+        if (verifiedLawyers.length === 0) {
+          return respond.ok(
+            ctx,
+            {
+              groups: [],
+              totalLawyers: 0,
+            },
+            "No verified lawyers found",
+            200
+          );
+        }
+
+        const formattedLawyers = verifiedLawyers.map((lawyer) => ({
+          accountId: lawyer.account,
+          name: lawyer.name,
+          photoUrl: lawyer.photo_url,
+          bio: lawyer.bio,
+          expertise: lawyer.expertise,
+          jurisdictions: lawyer.jurisdictions
+            ? lawyer.jurisdictions.split(",")
+            : [],
+          labels: lawyer.labels ? lawyer.labels.split(",") : [],
+          consultationFee: lawyer.consultation_fee,
+          verifiedAt: lawyer.verified_at,
+        }));
+
+        const agent = new Agent({
+          preamble: `You are an expert legal matching system. Your task is to analyze a client's current legal situation and future plans, then group lawyers into optimal teams of 1-5 lawyers that can best address their needs.
+
+          Consider:
+          - Lawyers' expertise areas and specializations
+          - Jurisdictions they practice in
+          - Labels that indicate their practice areas
+          - How well they match the client's current and future needs
+          - Complementary skills within each group
+
+          Create multiple groups where each group represents a different approach or combination of lawyers that could help the client. Some groups might focus on immediate needs, others on long-term planning, and some might offer comprehensive coverage.
+
+          Return groups ordered by relevance, with the most suitable combinations first.`,
+          model: "gemini-2.0-flash",
+        });
+
+        agent.setResponseJsonSchema({
+          type: "object",
+          properties: {
+            groups: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  groupName: {
+                    type: "string",
+                    description: "A descriptive name for this group of lawyers",
+                  },
+                  reasoning: {
+                    type: "string",
+                    description:
+                      "Why this group was formed and how they address the client's needs",
+                  },
+                  lawyers: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        accountId: { type: "string" },
+                        relevanceScore: {
+                          type: "number",
+                          minimum: 0,
+                          maximum: 10,
+                          description:
+                            "How relevant this lawyer is to the client's needs (0-10)",
+                        },
+                        roleInGroup: {
+                          type: "string",
+                          description:
+                            "This lawyer's specific role or contribution to addressing the client's needs",
+                        },
+                      },
+                      required: ["accountId", "relevanceScore", "roleInGroup"],
+                    },
+                    minItems: 1,
+                    maxItems: 5,
+                  },
+                },
+                required: ["groupName", "reasoning", "lawyers"],
+              },
+            },
+          },
+          required: ["groups"],
+        });
+
+        const lawyersData = formattedLawyers
+          .map((lawyer) =>
+            `
+Account ID: ${lawyer.accountId}
+Name: ${lawyer.name}
+Bio: ${lawyer.bio}
+Expertise: ${lawyer.expertise}
+Jurisdictions: ${lawyer.jurisdictions.join(", ")}
+Labels: ${lawyer.labels.join(", ")}
+Consultation Fee: $${lawyer.consultationFee}
+        `.trim()
+          )
+          .join("\n\n---\n\n");
+
+        const searchPrompt = `
+Client's Current Situation:
+${currentSituation}
+
+Client's Future Plans:
+${futurePlans}
+
+Available Lawyers:
+${lawyersData}
+
+Please create optimal groups of lawyers (1-5 per group) that can best address this client's current situation and future legal needs. Focus on creating practical, effective combinations.
+        `.trim();
+
+        const result = await agent.prompt(searchPrompt);
+
+        const enrichedGroups =
+          result.groups?.map((group: any) => ({
+            ...group,
+            lawyers: group.lawyers?.map((lawyer: any) => {
+              const fullLawyerData = formattedLawyers.find(
+                (l) => l.accountId === lawyer.accountId
+              );
+              return {
+                ...lawyer,
+                ...fullLawyerData,
+              };
+            }),
+          })) || [];
+
+        return respond.ok(
+          ctx,
+          {
+            groups: enrichedGroups,
+            totalLawyers: formattedLawyers.length,
+            query: {
+              currentSituation,
+              futurePlans,
+            },
+          },
+          "Lawyer search completed successfully",
+          200
+        );
+      } catch (error) {
+        console.error("Error searching lawyers:", error);
+        return respond.err(ctx, "Failed to search lawyers", 500);
+      }
+    }
+  );
