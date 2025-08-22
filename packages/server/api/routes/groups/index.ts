@@ -9,6 +9,15 @@ import {
   REQUEST_STATUS,
   type RequestStatus,
 } from "@/api/lib/constants";
+import { contracts, evmClient } from "@/api/lib/evm";
+import {
+  generateEncryptionKey,
+  encryptFile,
+  decryptFile,
+  hashDocument,
+} from "@/api/lib/utils/encryption";
+import { uploadToIPFS, getFromIPFS } from "@/api/lib/utils/ipfs";
+import * as viem from "viem";
 
 export default new Hono()
   .get("/:groupId", ensureUser, async (ctx) => {
@@ -505,4 +514,429 @@ export default new Hono()
         return respond.err(ctx, "Failed to respond to request", 500);
       }
     }
-  );
+  )
+  .post(
+    "/:groupId/documents",
+    ensureUser,
+    zValidator(
+      "json",
+      z.object({
+        title: z.string().min(1, "Title is required"),
+        description: z.string().optional(),
+        paymentRequired: z.number().min(0, "Payment must be non-negative"),
+        fileData: z.string(), // base64 encoded file
+        fileName: z.string().min(1, "File name is required"),
+      })
+    ),
+    async (ctx) => {
+      try {
+        const user = ctx.get("user");
+        const groupId = parseInt(ctx.req.param("groupId"));
+        const { title, description, paymentRequired, fileData, fileName } =
+          ctx.req.valid("json");
+
+        if (isNaN(groupId)) {
+          return respond.err(ctx, "Invalid group ID", 400);
+        }
+
+        const isLawyerInGroup = db
+          .query(
+            `
+            SELECT lgm.lawyer_account 
+            FROM lawyer_group_members lgm
+            JOIN lawyer_accounts la ON lgm.lawyer_account = la.account
+            WHERE lgm.group_id = ? AND lgm.lawyer_account = ? AND la.verified_at IS NOT NULL
+          `
+          )
+          .get(groupId, user.id);
+
+        if (!isLawyerInGroup) {
+          return respond.err(
+            ctx,
+            "Only verified lawyers in this group can add documents",
+            403
+          );
+        }
+
+        const fileBuffer = Buffer.from(fileData, "base64");
+        const documentHash = hashDocument(fileBuffer);
+
+        const encryptionKey = generateEncryptionKey();
+        const { encryptedData, iv, tag } = encryptFile(
+          fileBuffer,
+          encryptionKey
+        );
+
+        const ipfsResult = await uploadToIPFS(
+          encryptedData,
+          `encrypted_${fileName}`
+        );
+
+        let group = db
+          .query(
+            "SELECT escrow_contract_address FROM lawyer_groups WHERE id = ?"
+          )
+          .get(groupId) as any;
+
+        let escrowAddress = group?.escrow_contract_address;
+        if (!escrowAddress) {
+          const orchestrator = contracts.BrieflyOrchestrator();
+          const deployTx = await orchestrator.write.deployEscrowForGroup([
+            BigInt(groupId),
+          ]);
+
+          const receipt = await evmClient.waitForTransactionReceipt({
+            hash: deployTx,
+          });
+
+          const deployEvent = receipt.logs.find(
+            (log) =>
+              log.topics[0] ===
+              viem.keccak256(viem.toBytes("EscrowDeployed(uint256,address)"))
+          );
+
+          if (deployEvent && deployEvent.data) {
+            escrowAddress = `0x${deployEvent.data.slice(26)}`;
+
+            db.query(
+              "UPDATE lawyer_groups SET escrow_contract_address = ? WHERE id = ?"
+            ).run(escrowAddress, groupId);
+          } else {
+            return respond.err(ctx, "Failed to deploy escrow contract", 500);
+          }
+        }
+
+        const escrowContract = contracts.BrieflyEscrow(
+          escrowAddress as `0x${string}`
+        );
+
+        const addDocTx = await escrowContract.write.addDocument([
+          documentHash,
+          BigInt(paymentRequired * 1e18),
+          user.address,
+          BigInt(groupId),
+        ]);
+
+        const addDocReceipt = await evmClient.waitForTransactionReceipt({
+          hash: addDocTx,
+        });
+
+        let contractDocumentId = 1;
+        for (const log of addDocReceipt.logs) {
+          try {
+            const decoded = viem.decodeEventLog({
+              abi: contracts.BrieflyEscrow(
+                "0x0000000000000000000000000000000000000000"
+              ).abi,
+              data: log.data,
+              topics: log.topics,
+            });
+
+            if (decoded.eventName === "DocumentAdded") {
+              contractDocumentId = Number(decoded.args.documentId);
+              break;
+            }
+          } catch {
+            // Ignore logs that don't match our ABI
+          }
+        }
+
+        const documentResult = db
+          .query(
+            `
+          INSERT INTO group_documents (
+            group_id, lawyer_account, contract_document_id, title, description,
+            document_hash, ipfs_hash, encryption_key, payment_required, status
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          RETURNING id
+        `
+          )
+          .get(
+            groupId,
+            user.id,
+            contractDocumentId,
+            title,
+            description || null,
+            documentHash,
+            `${ipfsResult.hash}:${iv}:${tag}`,
+            encryptionKey,
+            paymentRequired,
+            "locked"
+          ) as { id: number };
+
+        return respond.ok(
+          ctx,
+          {
+            documentId: documentResult.id,
+            contractDocumentId,
+            title,
+            description,
+            paymentRequired,
+            status: "locked",
+            ipfsUrl: ipfsResult.url,
+          },
+          "Document added successfully",
+          201
+        );
+      } catch (error) {
+        console.error("Error adding document:", error);
+        return respond.err(ctx, "Failed to add document", 500);
+      }
+    }
+  )
+  .get("/:groupId/documents", ensureUser, async (ctx) => {
+    try {
+      const user = ctx.get("user");
+      const groupId = parseInt(ctx.req.param("groupId"));
+
+      if (isNaN(groupId)) {
+        return respond.err(ctx, "Invalid group ID", 400);
+      }
+
+      const isParticipant = db
+        .query(
+          `
+          SELECT 1 FROM (
+            SELECT lgm.lawyer_account as account FROM lawyer_group_members lgm WHERE lgm.group_id = ?
+            UNION
+            SELECT gr.requester_account as account FROM group_requests gr 
+            WHERE gr.group_id = ? AND gr.status = 'accepted'
+          ) participants WHERE account = ?
+        `
+        )
+        .get(groupId, groupId, user.id);
+
+      if (!isParticipant) {
+        return respond.err(
+          ctx,
+          "Access denied: Not a participant in this group",
+          403
+        );
+      }
+
+      const documents = db
+        .query(
+          `
+          SELECT 
+            gd.*,
+            la.name as lawyer_name,
+            la.photo_url as lawyer_photo
+          FROM group_documents gd
+          JOIN lawyer_accounts la ON gd.lawyer_account = la.account
+          WHERE gd.group_id = ?
+          ORDER BY gd.created_at DESC
+        `
+        )
+        .all(groupId) as any[];
+
+      const documentsWithStatus = await Promise.all(
+        documents.map(async (doc) => {
+          try {
+            const escrowAddress = db
+              .query(
+                "SELECT escrow_contract_address FROM lawyer_groups WHERE id = ?"
+              )
+              .get(groupId) as any;
+
+            if (!escrowAddress?.escrow_contract_address) {
+              return {
+                ...doc,
+                status: "locked",
+                canAccess: false,
+              };
+            }
+
+            const escrowContract = contracts.BrieflyEscrow(
+              escrowAddress.escrow_contract_address as `0x${string}`
+            );
+
+            const isUnlocked = await escrowContract.read.isDocumentUnlocked([
+              BigInt(doc.contract_document_id),
+            ]);
+
+            const status = isUnlocked ? "unlocked" : "locked";
+
+            if (status === "unlocked" && doc.status === "locked") {
+              db.query(
+                "UPDATE group_documents SET status = 'unlocked', unlocked_at = CURRENT_TIMESTAMP WHERE id = ?"
+              ).run(doc.id);
+            }
+
+            return {
+              id: doc.id,
+              title: doc.title,
+              description: doc.description,
+              paymentRequired: doc.payment_required,
+              status,
+              canAccess: isUnlocked,
+              createdAt: doc.created_at,
+              lawyer: {
+                name: doc.lawyer_name,
+                photoUrl: doc.lawyer_photo,
+              },
+            };
+          } catch (error) {
+            console.error("Error checking document status:", error);
+            return {
+              ...doc,
+              status: "locked",
+              canAccess: false,
+            };
+          }
+        })
+      );
+
+      return respond.ok(
+        ctx,
+        { documents: documentsWithStatus },
+        "Documents retrieved successfully",
+        200
+      );
+    } catch (error) {
+      console.error("Error fetching documents:", error);
+      return respond.err(ctx, "Failed to fetch documents", 500);
+    }
+  })
+  .post("/:groupId/documents/:documentId/pay", ensureUser, async (ctx) => {
+    try {
+      const user = ctx.get("user");
+      const groupId = parseInt(ctx.req.param("groupId"));
+      const documentId = parseInt(ctx.req.param("documentId"));
+
+      if (isNaN(groupId) || isNaN(documentId)) {
+        return respond.err(ctx, "Invalid group or document ID", 400);
+      }
+
+      const document = db
+        .query(
+          `
+          SELECT gd.*, lg.escrow_contract_address
+          FROM group_documents gd
+          JOIN lawyer_groups lg ON gd.group_id = lg.id
+          WHERE gd.id = ? AND gd.group_id = ?
+        `
+        )
+        .get(documentId, groupId) as any;
+
+      if (!document) {
+        return respond.err(ctx, "Document not found", 404);
+      }
+
+      if (!document.escrow_contract_address) {
+        return respond.err(ctx, "Escrow contract not deployed", 400);
+      }
+
+      const escrowContract = contracts.BrieflyEscrow(
+        document.escrow_contract_address as `0x${string}`
+      );
+
+      const paymentTx = await escrowContract.write.makePayment([
+        BigInt(document.contract_document_id),
+      ]);
+
+      await evmClient.waitForTransactionReceipt({ hash: paymentTx });
+
+      db.query(
+        "UPDATE group_documents SET status = 'unlocked', unlocked_at = CURRENT_TIMESTAMP WHERE id = ?"
+      ).run(documentId);
+
+      return respond.ok(
+        ctx,
+        {
+          documentId,
+          status: "unlocked",
+          transactionHash: paymentTx,
+        },
+        "Payment successful, document unlocked",
+        200
+      );
+    } catch (error) {
+      console.error("Error processing payment:", error);
+      return respond.err(ctx, "Payment failed", 500);
+    }
+  })
+  .get("/:groupId/documents/:documentId/download", ensureUser, async (ctx) => {
+    try {
+      const user = ctx.get("user");
+      const groupId = parseInt(ctx.req.param("groupId"));
+      const documentId = parseInt(ctx.req.param("documentId"));
+
+      if (isNaN(groupId) || isNaN(documentId)) {
+        return respond.err(ctx, "Invalid group or document ID", 400);
+      }
+
+      const document = db
+        .query(
+          `
+          SELECT gd.*, lg.escrow_contract_address
+          FROM group_documents gd
+          JOIN lawyer_groups lg ON gd.group_id = lg.id
+          WHERE gd.id = ? AND gd.group_id = ?
+        `
+        )
+        .get(documentId, groupId) as any;
+
+      if (!document) {
+        return respond.err(ctx, "Document not found", 404);
+      }
+
+      const isParticipant = db
+        .query(
+          `
+          SELECT 1 FROM (
+            SELECT lgm.lawyer_account as account FROM lawyer_group_members lgm WHERE lgm.group_id = ?
+            UNION
+            SELECT gr.requester_account as account FROM group_requests gr 
+            WHERE gr.group_id = ? AND gr.status = 'accepted'
+          ) participants WHERE account = ?
+        `
+        )
+        .get(groupId, groupId, user.id);
+
+      if (!isParticipant) {
+        return respond.err(
+          ctx,
+          "Access denied: Not a participant in this group",
+          403
+        );
+      }
+
+      if (document.status === "locked") {
+        return respond.err(
+          ctx,
+          "Document is locked. Payment required to access.",
+          402
+        );
+      }
+
+      try {
+        const [ipfsHash, iv, tag] = document.ipfs_hash.split(":");
+        const encryptedData = await getFromIPFS(ipfsHash);
+        const decryptedData = decryptFile(
+          encryptedData,
+          document.encryption_key,
+          iv,
+          tag
+        );
+
+        db.query(
+          "INSERT INTO document_access_logs (document_id, account_id, access_type) VALUES (?, ?, ?)"
+        ).run(documentId, user.id, "download");
+
+        const response = new Response(new Uint8Array(decryptedData), {
+          headers: {
+            "Content-Type": "application/octet-stream",
+            "Content-Disposition": `attachment; filename="${document.title}"`,
+          },
+        });
+
+        return response;
+      } catch (error) {
+        console.error("Error decrypting/downloading file:", error);
+        return respond.err(ctx, "Failed to download document", 500);
+      }
+    } catch (error) {
+      console.error("Error downloading document:", error);
+      return respond.err(ctx, "Failed to download document", 500);
+    }
+  });
