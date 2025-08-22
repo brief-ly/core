@@ -6,6 +6,7 @@ import ensureUser from "@/api/lib/middlewares/ensureUser";
 import ensureAdmin from "@/api/lib/middlewares/ensureAdmin";
 import { db } from "@/api/lib/data/db";
 import { Agent } from "@/agent";
+import { contracts, evmClient } from "@/api/lib/evm";
 
 export default new Hono()
   .post(
@@ -132,6 +133,7 @@ export default new Hono()
           jurisdictions,
           labels,
           consultationFee: lawyerApplication.consultation_fee,
+          nftTokenId: lawyerApplication.nft_token_id,
           verified: !!lawyerApplication.verified_at,
           submittedAt: lawyerApplication.created_at,
           verifiedAt: lawyerApplication.verified_at,
@@ -199,10 +201,39 @@ export default new Hono()
           consultationFee: existingLawyer.consultation_fee || 0,
         });
 
+        const lawyerAccount = db
+          .query("SELECT wallet_address FROM account WHERE id = ? LIMIT 1")
+          .get(accountId) as any;
+
+        if (!lawyerAccount) {
+          return respond.err(ctx, "Lawyer account not found", 404);
+        }
+
+        const lawyerIdentityContract = contracts.BrieflyLawyerIdentity();
+
+        const mintTxHash = await lawyerIdentityContract.write.safeMint([
+          lawyerAccount.wallet_address,
+        ]);
+
+        const mintReceipt = await evmClient.waitForTransactionReceipt({
+          hash: mintTxHash,
+        });
+
+        const transferEvent = mintReceipt.logs.find(
+          (log) =>
+            log.topics[0] ===
+            "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+        );
+
+        let nftTokenId = null;
+        if (transferEvent && transferEvent.topics[3]) {
+          nftTokenId = parseInt(transferEvent.topics[3], 16);
+        }
+
         db.transaction(() => {
           db.query(
-            "UPDATE lawyer_accounts SET verified_at = ? WHERE account = ?"
-          ).run(currentTime, accountId);
+            "UPDATE lawyer_accounts SET verified_at = ?, nft_token_id = ? WHERE account = ?"
+          ).run(currentTime, nftTokenId, accountId);
 
           db.query("DELETE FROM lawyer_labels WHERE account = ?").run(
             accountId
@@ -221,8 +252,10 @@ export default new Hono()
             accountId,
             approvedAt: currentTime,
             generatedLabels: labels,
+            nftTokenId,
+            mintTxHash,
           },
-          "Lawyer application approved successfully with AI-generated labels",
+          "Lawyer application approved successfully with AI-generated labels and NFT minted",
           200
         );
       } catch (error) {
@@ -303,6 +336,7 @@ export default new Hono()
           : [],
         labels: lawyer.labels ? lawyer.labels.split(",") : [],
         consultationFee: lawyer.consultation_fee,
+        nftTokenId: lawyer.nft_token_id,
         verifiedAt: lawyer.verified_at,
       }));
 
@@ -350,6 +384,7 @@ export default new Hono()
           : [],
         labels: lawyer.labels ? lawyer.labels.split(",") : [],
         consultationFee: lawyer.consultation_fee,
+        nftTokenId: lawyer.nft_token_id,
         verifiedAt: lawyer.verified_at,
       }));
 
@@ -515,6 +550,7 @@ export default new Hono()
             jurisdictions: finalJurisdictions,
             labels: newLabels,
             consultationFee: finalConsultationFee,
+            nftTokenId: existingLawyer.nft_token_id,
             verifiedAt: existingLawyer.verified_at,
             labelsRegenerated: shouldRegenerateLabels,
           },
@@ -587,6 +623,7 @@ export default new Hono()
             : [],
           labels: lawyer.labels ? lawyer.labels.split(",") : [],
           consultationFee: lawyer.consultation_fee,
+          nftTokenId: lawyer.nft_token_id,
           verifiedAt: lawyer.verified_at,
         }));
 

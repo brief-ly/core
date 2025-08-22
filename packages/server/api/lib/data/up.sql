@@ -14,6 +14,7 @@ CREATE TABLE
         bio TEXT NOT NULL,
         expertise TEXT NOT NULL,
         consultation_fee INTEGER,
+        nft_token_id INTEGER,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         verified_at TIMESTAMP
     );
