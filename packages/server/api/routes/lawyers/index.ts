@@ -675,9 +675,8 @@ Please create optimal groups of lawyers (1-5 per group) that can best address th
         const result = await agent.prompt(searchPrompt);
 
         const enrichedGroups =
-          result.groups?.map((group: any) => ({
-            ...group,
-            lawyers: group.lawyers?.map((lawyer: any) => {
+          result.groups?.map((group: any) => {
+            const groupLawyers = group.lawyers?.map((lawyer: any) => {
               const fullLawyerData = formattedLawyers.find(
                 (l) => l.accountId === lawyer.accountId
               );
@@ -685,8 +684,38 @@ Please create optimal groups of lawyers (1-5 per group) that can best address th
                 ...lawyer,
                 ...fullLawyerData,
               };
-            }),
-          })) || [];
+            });
+
+            const groupId = db
+              .query(
+                `
+              INSERT INTO lawyer_groups (group_name, reasoning)
+              VALUES (?, ?)
+              RETURNING id
+            `
+              )
+              .get(group.groupName, group.reasoning) as { id: number };
+
+            for (const lawyer of group.lawyers || []) {
+              db.query(
+                `
+                INSERT INTO lawyer_group_members (group_id, lawyer_account, relevance_score, role_in_group)
+                VALUES (?, ?, ?, ?)
+              `
+              ).run(
+                groupId.id,
+                lawyer.accountId,
+                lawyer.relevanceScore,
+                lawyer.roleInGroup
+              );
+            }
+
+            return {
+              ...group,
+              groupId: groupId.id,
+              lawyers: groupLawyers,
+            };
+          }) || [];
 
         return respond.ok(
           ctx,
