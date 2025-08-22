@@ -1,4 +1,7 @@
 import { useState } from "react";
+import { usePrivy } from "@privy-io/react-auth";
+import { useChainId, useSwitchChain } from "wagmi";
+import { hardhat, mainnet } from "viem/chains";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,19 +14,29 @@ import {
 } from "../ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { Button } from "../ui/button";
+import { Skeleton } from "../ui/skeleton";
 import { useTheme } from "../../context/theme-provider";
 import Icon from "../custom/Icon";
+import { truncateAddress } from "../../utils";
 
-export function UserDropdown() {
+export function Connect() {
   const { theme, setTheme } = useTheme();
   const [isOpen, setIsOpen] = useState(false);
 
-  // Mock user data - replace with actual user data from your auth system
-  const user = {
-    name: "Kartikay Tiwari",
-    email: "kartik100100@gmail.com",
-    avatar: undefined, // Add user avatar URL here
-  };
+  const isProd = process.env.NODE_ENV === "production";
+  const correctChainId = isProd ? mainnet.id : hardhat.id;
+  const correctChainName = isProd ? "Ethereum Mainnet" : "Hardhat";
+
+  const { ready, authenticated, user, login: privyLogin, logout: privyLogout } = usePrivy();
+  const currentChainId = useChainId();
+  const { switchChain, isPending: isSwitchingChain } = useSwitchChain();
+
+  const isWalletConnected = ready && authenticated && user?.wallet?.address;
+  const isOnCorrectNetwork = !!currentChainId && currentChainId === correctChainId;
+
+  const displayName = "Anonymous";
+  const walletAddress = truncateAddress(user?.wallet?.address || "");
+  const avatarUrl = undefined;
 
   const getInitials = (name: string) => {
     return name
@@ -38,10 +51,29 @@ export function UserDropdown() {
     setTheme(newTheme);
   };
 
-  const handleLogout = () => {
-    // Implement logout logic here
-    console.log("Logout clicked");
-    setIsOpen(false);
+  const handleConnect = () => {
+    try {
+      privyLogin();
+    } catch (err) {
+      console.error("Failed to connect:", err);
+    }
+  };
+
+  const handleSwitchNetwork = () => {
+    try {
+      switchChain({ chainId: correctChainId });
+    } catch (err) {
+      console.error("Failed to switch network:", err);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await privyLogout();
+      setIsOpen(false);
+    } catch (err) {
+      console.error("Failed to logout:", err);
+    }
   };
 
   const handleProfileClick = () => {
@@ -79,23 +111,72 @@ export function UserDropdown() {
     console.log("Documentation clicked");
   };
 
+  // Loading state
+  if (!ready) {
+    return (
+      <Button disabled variant="outline" className="rounded-md">
+        <Skeleton className="w-24 h-4 bg-muted" />
+      </Button>
+    );
+  }
+
+  // Not connected
+  if (!isWalletConnected) {
+    return (
+      <Button onClick={handleConnect} variant="secondary" className="border relative h-12 w-auto rounded-lg p-3">
+        <div className="flex items-center gap-3">
+          <Icon name="Wallet" className="h-4 w-4" />
+          <div className="hidden md:flex flex-col items-start">
+            <span className="text-sm font-medium leading-none">Connect Wallet</span>
+          </div>
+        </div>
+      </Button>
+    );
+  }
+
+  // Wrong network
+  if (!isOnCorrectNetwork) {
+    const currentNetworkName = currentChainId === mainnet.id ? "Ethereum Mainnet" : currentChainId === hardhat.id ? "Hardhat" : `Chain ID ${currentChainId}`;
+
+    return (
+      <div className="flex items-center gap-3">
+        <Button onClick={handleSwitchNetwork} disabled={isSwitchingChain} variant="destructive" className="py-2 px-4 rounded-md">
+          {isSwitchingChain ? (
+            <div className="flex items-center">
+              <Icon name="Loader" className="size-4 mr-2 animate-spin" />
+              Switching...
+            </div>
+          ) : (
+            <div className="flex items-center">
+              <Icon name="CircleAlert" className="size-4 mr-2" />
+              Wrong network: {currentNetworkName}
+            </div>
+          )}
+        </Button>
+        <Button onClick={handleLogout} variant="outline" className="py-2 px-4 rounded-md">
+          <Icon name="X" className="size-4" />
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
       <DropdownMenuTrigger asChild>
         <Button
           variant="secondary"
-          className="relative h-12 w-auto rounded-lg p-3"
+          className="border relative h-12 w-auto rounded-lg p-3"
         >
           <div className="flex items-center gap-3">
             <Avatar className="h-8 w-8">
-              <AvatarImage src={user.avatar} alt={user.name} />
+              <AvatarImage src={avatarUrl} alt={displayName} />
               <AvatarFallback className="text-xs bg-primary text-white font-medium">
-                {getInitials(user.name || "User")}
+                {getInitials(displayName || "User")}
               </AvatarFallback>
             </Avatar>
             <div className="hidden md:flex flex-col items-start">
               <span className="text-sm font-medium leading-none">
-                {user.name}
+                {displayName}
               </span>
             </div>
             <Icon name="ChevronDown" className="h-4 w-4 text-muted-foreground" />
@@ -105,10 +186,12 @@ export function UserDropdown() {
       <DropdownMenuContent className="w-64" align="end" forceMount>
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
-            <p className="text-sm font-medium leading-none">{user.name}</p>
-            <p className="text-xs leading-none text-muted-foreground">
-              {user.email}
-            </p>
+            <p className="text-sm font-medium leading-none">{displayName}</p>
+            {walletAddress && (
+              <p className="text-xs leading-none text-muted-foreground">
+                {walletAddress}
+              </p>
+            )}
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />

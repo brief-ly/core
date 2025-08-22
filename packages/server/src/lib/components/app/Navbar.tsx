@@ -1,6 +1,6 @@
 import { useLocation } from "@tanstack/react-router";
 import { Image } from "../custom/Image";
-import { UserDropdown } from "./UserDropdown";
+import { Connect } from "./Connect";
 
 export default function Navbar() {
   const location = useLocation();
@@ -15,7 +15,7 @@ export default function Navbar() {
 
       {/* top right - user dropdown */}
       <div className="flex items-center gap-4">
-        <UserDropdown />
+        <Connect />
       </div>
     </nav>
   )

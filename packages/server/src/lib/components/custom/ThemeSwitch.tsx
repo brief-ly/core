@@ -6,6 +6,8 @@ import Icon from "../custom/Icon";
 export default function ThemeSwitch() {
   const { theme, setTheme } = useTheme();
 
+  return null;
+
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0 }}
