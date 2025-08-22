@@ -368,4 +368,166 @@ export default new Hono()
       console.error("Error fetching verified lawyers:", error);
       return respond.err(ctx, "Failed to fetch verified lawyers", 500);
     }
-  });
+  })
+  .patch(
+    "/profile",
+    ensureUser,
+    zValidator(
+      "json",
+      z.object({
+        photoUrl: z.string().url("Valid photo URL is required").optional(),
+        bio: z
+          .string()
+          .min(10, "Bio must be at least 10 characters")
+          .optional(),
+        expertise: z.string().min(1, "Expertise is required").optional(),
+        jurisdictions: z
+          .array(z.string())
+          .min(1, "At least one jurisdiction is required")
+          .optional(),
+        consultationFee: z
+          .number()
+          .min(0, "Consultation fee must be non-negative")
+          .optional(),
+      })
+    ),
+    async (ctx) => {
+      try {
+        const user = ctx.get("user");
+        const updateData = ctx.req.valid("json");
+
+        const existingLawyer = db
+          .query(
+            `
+            SELECT 
+              la.*,
+              GROUP_CONCAT(DISTINCT lj.jurisdiction) as jurisdictions,
+              GROUP_CONCAT(DISTINCT ll.label) as labels
+            FROM lawyer_accounts la
+            LEFT JOIN lawyer_jurisdictions lj ON la.account = lj.account
+            LEFT JOIN lawyer_labels ll ON la.account = ll.account
+            WHERE la.account = ? AND la.verified_at IS NOT NULL
+            GROUP BY la.account
+            LIMIT 1
+          `
+          )
+          .get(user.id) as any;
+
+        if (!existingLawyer) {
+          return respond.err(ctx, "Verified lawyer account not found", 404);
+        }
+
+        const currentJurisdictions = existingLawyer.jurisdictions
+          ? existingLawyer.jurisdictions.split(",")
+          : [];
+
+        const shouldRegenerateLabels =
+          updateData.bio !== undefined ||
+          updateData.expertise !== undefined ||
+          updateData.jurisdictions !== undefined;
+
+        const finalBio = updateData.bio ?? existingLawyer.bio;
+        const finalExpertise = updateData.expertise ?? existingLawyer.expertise;
+        const finalJurisdictions =
+          updateData.jurisdictions ?? currentJurisdictions;
+        const finalConsultationFee =
+          updateData.consultationFee ?? existingLawyer.consultation_fee;
+        const finalPhotoUrl = updateData.photoUrl ?? existingLawyer.photo_url;
+
+        let newLabels = existingLawyer.labels
+          ? existingLawyer.labels.split(",")
+          : [];
+
+        if (shouldRegenerateLabels) {
+          const agent = new Agent({
+            preamble: "You are a legal categorization expert.",
+            model: "gemini-2.0-flash",
+          });
+
+          newLabels = await agent.extractLawyerLabels({
+            name: existingLawyer.name,
+            bio: finalBio,
+            expertise: finalExpertise,
+            jurisdictions: finalJurisdictions,
+            consultationFee: finalConsultationFee,
+          });
+        }
+
+        db.transaction(() => {
+          const updates = [];
+          const values = [];
+
+          if (updateData.photoUrl !== undefined) {
+            updates.push("photo_url = ?");
+            values.push(updateData.photoUrl);
+          }
+          if (updateData.bio !== undefined) {
+            updates.push("bio = ?");
+            values.push(updateData.bio);
+          }
+          if (updateData.expertise !== undefined) {
+            updates.push("expertise = ?");
+            values.push(updateData.expertise);
+          }
+          if (updateData.consultationFee !== undefined) {
+            updates.push("consultation_fee = ?");
+            values.push(updateData.consultationFee);
+          }
+
+          if (updates.length > 0) {
+            values.push(user.id);
+            db.query(
+              `UPDATE lawyer_accounts SET ${updates.join(
+                ", "
+              )} WHERE account = ?`
+            ).run(...values);
+          }
+
+          if (updateData.jurisdictions !== undefined) {
+            db.query("DELETE FROM lawyer_jurisdictions WHERE account = ?").run(
+              user.id
+            );
+            for (const jurisdiction of updateData.jurisdictions) {
+              db.query(
+                "INSERT INTO lawyer_jurisdictions (account, jurisdiction) VALUES (?, ?)"
+              ).run(user.id, jurisdiction);
+            }
+          }
+
+          if (shouldRegenerateLabels) {
+            db.query("DELETE FROM lawyer_labels WHERE account = ?").run(
+              user.id
+            );
+            for (const label of newLabels) {
+              db.query(
+                "INSERT INTO lawyer_labels (account, label) VALUES (?, ?)"
+              ).run(user.id, label);
+            }
+          }
+        })();
+
+        return respond.ok(
+          ctx,
+          {
+            accountId: user.id,
+            name: existingLawyer.name,
+            photoUrl: finalPhotoUrl,
+            bio: finalBio,
+            expertise: finalExpertise,
+            jurisdictions: finalJurisdictions,
+            labels: newLabels,
+            consultationFee: finalConsultationFee,
+            verifiedAt: existingLawyer.verified_at,
+            labelsRegenerated: shouldRegenerateLabels,
+          },
+          shouldRegenerateLabels
+            ? "Profile updated successfully with regenerated labels"
+            : "Profile updated successfully",
+          200
+        );
+      } catch (error) {
+        console.error("Error updating lawyer profile:", error);
+        return respond.err(ctx, "Failed to update lawyer profile", 500);
+      }
+    }
+  );
