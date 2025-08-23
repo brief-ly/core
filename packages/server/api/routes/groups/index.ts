@@ -10,13 +10,8 @@ import {
   type RequestStatus,
 } from "@/api/lib/constants";
 import { contracts, evmClient } from "@/api/lib/evm";
-import {
-  generateEncryptionKey,
-  encryptFile,
-  decryptFile,
-  hashDocument,
-} from "@/api/lib/utils/encryption";
-import { uploadToIPFS, getFromIPFS } from "@/api/lib/utils/ipfs";
+import { decryptFile } from "@/api/lib/utils/encryption";
+import { getFromIPFS } from "@/api/lib/utils/ipfs";
 import * as viem from "viem";
 
 export default new Hono()
@@ -524,16 +519,27 @@ export default new Hono()
         title: z.string().min(1, "Title is required"),
         description: z.string().optional(),
         paymentRequired: z.number().min(0, "Payment must be non-negative"),
-        fileData: z.string(), // base64 encoded file
-        fileName: z.string().min(1, "File name is required"),
+        documentHash: z.string().min(1, "Document hash is required"),
+        ipfsHash: z.string().min(1, "IPFS hash is required"),
+        encryptionKey: z.string().min(1, "Encryption key is required"),
+        iv: z.string().min(1, "IV is required"),
+        tag: z.string().min(1, "Auth tag is required"),
       })
     ),
     async (ctx) => {
       try {
         const user = ctx.get("user");
         const groupId = parseInt(ctx.req.param("groupId"));
-        const { title, description, paymentRequired, fileData, fileName } =
-          ctx.req.valid("json");
+        const {
+          title,
+          description,
+          paymentRequired,
+          documentHash,
+          ipfsHash,
+          encryptionKey,
+          iv,
+          tag,
+        } = ctx.req.valid("json");
 
         if (isNaN(groupId)) {
           return respond.err(ctx, "Invalid group ID", 400);
@@ -557,20 +563,6 @@ export default new Hono()
             403
           );
         }
-
-        const fileBuffer = Buffer.from(fileData, "base64");
-        const documentHash = hashDocument(fileBuffer);
-
-        const encryptionKey = generateEncryptionKey();
-        const { encryptedData, iv, tag } = encryptFile(
-          fileBuffer,
-          encryptionKey
-        );
-
-        const ipfsResult = await uploadToIPFS(
-          encryptedData,
-          `encrypted_${fileName}`
-        );
 
         let group = db
           .query(
@@ -658,7 +650,7 @@ export default new Hono()
             title,
             description || null,
             documentHash,
-            `${ipfsResult.hash}:${iv}:${tag}`,
+            `${ipfsHash}:${iv}:${tag}`,
             encryptionKey,
             paymentRequired,
             "locked"
@@ -673,7 +665,7 @@ export default new Hono()
             description,
             paymentRequired,
             status: "locked",
-            ipfsUrl: ipfsResult.url,
+            ipfsHash,
           },
           "Document added successfully",
           201
