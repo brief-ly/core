@@ -151,6 +151,31 @@ export function useApi() {
             }
         }),
 
+        // Get Lawyer Profile by Wallet Address
+        getLawyerProfileByWallet: (walletAddress: string) => useQuery({
+            queryKey: ["lawyer-profile", walletAddress],
+            queryFn: async () => {
+                const result = await client.lawyers[":walletAddress"].$get(
+                    {
+                        param: { walletAddress },
+                    },
+                    {
+                        headers: {
+                            Authorization: accessToken ? `Bearer ${accessToken}` : "",
+                        },
+                    });
+
+                const parsed = await result.json();
+
+                if (!parsed.success) {
+                    throw new Error(parsed.error);
+                }
+
+                return parsed.data;
+            },
+            enabled: !!walletAddress && !!accessToken,
+        }),
+
         // Update Lawyer Profile
         updateLawyerProfile: useMutation({
             mutationFn: async (data: {
