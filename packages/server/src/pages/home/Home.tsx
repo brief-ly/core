@@ -19,9 +19,6 @@ export default function HomePage() {
     const searchQuery = search.q || "";
     const hasSearched = !!searchQuery;
 
-    const { data: lawyerData } = useApi().getVerifiedLawyers();
-    console.log({ lawyers: lawyerData?.lawyers });
-
     useEffect(() => {
         if (isAuthenticated && pendingSearchQuery) {
             navigate({ to: '/', search: { q: pendingSearchQuery.trim() } });

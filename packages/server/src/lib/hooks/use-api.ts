@@ -49,7 +49,7 @@ export function useApi() {
                 console.log(res);
             },
             onError: (err) => {
-                console.error(err);
+                console.log({ err });
                 toast.error("Failed to submit lawyer application");
             }
         }),
@@ -58,12 +58,14 @@ export function useApi() {
         getLawyerApplicationStatus: () => useQuery({
             queryKey: ["lawyer-application-status"],
             queryFn: async () => {
-                console.log({ accessToken });
-                const result = await client.lawyers.request.status.$get({
-                    headers: {
-                        Authorization: accessToken ? `Bearer ${accessToken}` : "",
+                const result = await client.lawyers.request.status.$get(
+                    {
                     },
-                });
+                    {
+                        headers: {
+                            Authorization: accessToken ? `Bearer ${accessToken}` : "",
+                        },
+                    });
 
                 const parsed = await result.json();
 
@@ -109,10 +111,12 @@ export function useApi() {
             queryKey: ["pending-lawyer-applications"],
             queryFn: async () => {
                 const result = await client.lawyers.admin.pending.$get({
-                    headers: {
-                        Authorization: accessToken ? `Bearer ${accessToken}` : "",
-                    },
-                });
+                },
+                    {
+                        headers: {
+                            Authorization: accessToken ? `Bearer ${accessToken}` : "",
+                        },
+                    });
 
                 const parsed = await result.json();
 
@@ -129,12 +133,13 @@ export function useApi() {
         getVerifiedLawyers: () => useQuery({
             queryKey: ["verified-lawyers"],
             queryFn: async () => {
-                console.log({ accessToken });
-                const result = await client.lawyers.index.$get({
-                    headers: {
-                        Authorization: accessToken ? `Bearer ${accessToken}` : "",
-                    },
-                });
+                const result = await client.lawyers.index.$get(
+                    {},
+                    {
+                        headers: {
+                            Authorization: accessToken ? `Bearer ${accessToken}` : "",
+                        },
+                    });
 
                 const parsed = await result.json();
 
@@ -216,6 +221,10 @@ export function useApi() {
             mutationFn: async (file: File) => {
                 const result = await client.upload.index.$post({
                     form: { file },
+                }, {
+                    headers: {
+                        Authorization: accessToken ? `Bearer ${accessToken}` : "",
+                    },
                 })
 
                 const parsed = await result.json();

@@ -9,7 +9,6 @@ export const privyClient = new PrivyClient(
 
 export async function getPrivyUserFromContext(ctx: Context) {
   const accessToken = ctx.req.header("Authorization")?.replace("Bearer ", "");
-  console.log({ accessToken });
   if (!accessToken) return null;
   try {
     const { userId } = await privyClient.verifyAuthToken(accessToken);
