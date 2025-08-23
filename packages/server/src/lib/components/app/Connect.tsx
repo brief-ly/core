@@ -81,6 +81,7 @@ export function Connect() {
   const handleProfileClick = () => {
     // Navigate to profile page
     console.log("Profile clicked");
+    navigate({ to: '/profile/$id', params: { id: user?.wallet?.address || "" } });
   };
 
   const handleSettingsClick = () => {
