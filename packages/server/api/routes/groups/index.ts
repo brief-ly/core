@@ -656,6 +656,20 @@ const groups = new Hono()
             "locked"
           ) as { id: number };
 
+        db.query(
+          `
+          INSERT INTO group_messages (group_id, sender_account, message_type, message_content, document_id)
+          VALUES (?, ?, 'system', ?, ?)
+        `
+        ).run(
+          groupId,
+          user.id,
+          `📄 New document added: "${title}"${
+            description ? ` - ${description}` : ""
+          }`,
+          documentResult.id
+        );
+
         return respond.ok(
           ctx,
           {
@@ -930,6 +944,322 @@ const groups = new Hono()
     } catch (error) {
       console.error("Error downloading document:", error);
       return respond.err(ctx, "Failed to download document", 500);
+    }
+  })
+  .post(
+    "/:groupId/messages",
+    ensureUser,
+    zValidator(
+      "json",
+      z.object({
+        messageContent: z.string().min(1, "Message content is required"),
+        messageType: z.enum(["text", "document", "system"]).default("text"),
+        documentId: z.number().optional(),
+      })
+    ),
+    async (ctx) => {
+      try {
+        const user = ctx.get("user");
+        const groupId = parseInt(ctx.req.param("groupId"));
+        const { messageContent, messageType, documentId } =
+          ctx.req.valid("json");
+
+        if (isNaN(groupId)) {
+          return respond.err(ctx, "Invalid group ID", 400);
+        }
+
+        const isParticipant = db
+          .query(
+            `
+            SELECT 1 FROM (
+              SELECT lgm.lawyer_account as account FROM lawyer_group_members lgm WHERE lgm.group_id = ?
+              UNION
+              SELECT gr.requester_account as account FROM group_requests gr 
+              WHERE gr.group_id = ? AND gr.status = 'accepted'
+            ) participants WHERE account = ?
+          `
+          )
+          .get(groupId, groupId, user.id);
+
+        if (!isParticipant) {
+          return respond.err(
+            ctx,
+            "Not authorized to send messages in this group",
+            403
+          );
+        }
+
+        if (messageType === "document" && !documentId) {
+          return respond.err(
+            ctx,
+            "Document ID is required for document messages",
+            400
+          );
+        }
+
+        if (messageType === "document" && documentId) {
+          const document = db
+            .query(
+              "SELECT id FROM group_documents WHERE id = ? AND group_id = ?"
+            )
+            .get(documentId, groupId);
+
+          if (!document) {
+            return respond.err(ctx, "Document not found in this group", 404);
+          }
+        }
+
+        const messageResult = db
+          .query(
+            `
+            INSERT INTO group_messages (group_id, sender_account, message_type, message_content, document_id)
+            VALUES (?, ?, ?, ?, ?)
+            RETURNING id, created_at
+          `
+          )
+          .get(
+            groupId,
+            user.id,
+            messageType,
+            messageContent,
+            documentId || null
+          ) as {
+          id: number;
+          created_at: string;
+        };
+
+        const senderInfo = db
+          .query(
+            `
+            SELECT 
+              CASE 
+                WHEN la.account IS NOT NULL THEN la.name
+                ELSE a.wallet_address
+              END as sender_name,
+              la.photo_url as sender_photo
+            FROM account a
+            LEFT JOIN lawyer_accounts la ON a.id = la.account
+            WHERE a.id = ?
+          `
+          )
+          .get(user.id) as any;
+
+        return respond.ok(
+          ctx,
+          {
+            messageId: messageResult.id,
+            groupId,
+            messageType,
+            messageContent,
+            documentId: documentId || null,
+            sender: {
+              accountId: user.id,
+              name: senderInfo?.sender_name || "Unknown",
+              photoUrl: senderInfo?.sender_photo || null,
+            },
+            createdAt: messageResult.created_at,
+          },
+          "Message sent successfully",
+          201
+        );
+      } catch (error) {
+        console.error("Error sending message:", error);
+        return respond.err(ctx, "Failed to send message", 500);
+      }
+    }
+  )
+  .get("/:groupId/messages", ensureUser, async (ctx) => {
+    try {
+      const user = ctx.get("user");
+      const groupId = parseInt(ctx.req.param("groupId"));
+      const page = parseInt(ctx.req.query("page") || "1");
+      const limit = parseInt(ctx.req.query("limit") || "50");
+      const offset = (page - 1) * limit;
+
+      if (isNaN(groupId)) {
+        return respond.err(ctx, "Invalid group ID", 400);
+      }
+
+      const isParticipant = db
+        .query(
+          `
+          SELECT 1 FROM (
+            SELECT lgm.lawyer_account as account FROM lawyer_group_members lgm WHERE lgm.group_id = ?
+            UNION
+            SELECT gr.requester_account as account FROM group_requests gr 
+            WHERE gr.group_id = ? AND gr.status = 'accepted'
+          ) participants WHERE account = ?
+        `
+        )
+        .get(groupId, groupId, user.id);
+
+      if (!isParticipant) {
+        return respond.err(
+          ctx,
+          "Not authorized to view messages in this group",
+          403
+        );
+      }
+
+      const messages = db
+        .query(
+          `
+          SELECT 
+            gm.*,
+            CASE 
+              WHEN la.account IS NOT NULL THEN la.name
+              ELSE a.wallet_address
+            END as sender_name,
+            la.photo_url as sender_photo,
+            gd.title as document_title,
+            gd.description as document_description,
+            gd.status as document_status,
+            gd.payment_required as document_payment_required
+          FROM group_messages gm
+          JOIN account a ON gm.sender_account = a.id
+          LEFT JOIN lawyer_accounts la ON a.id = la.account
+          LEFT JOIN group_documents gd ON gm.document_id = gd.id
+          WHERE gm.group_id = ?
+          ORDER BY gm.created_at DESC
+          LIMIT ? OFFSET ?
+        `
+        )
+        .all(groupId, limit, offset) as any[];
+
+      const totalMessages = db
+        .query(
+          "SELECT COUNT(*) as count FROM group_messages WHERE group_id = ?"
+        )
+        .get(groupId) as { count: number };
+
+      const allDocuments = db
+        .query(
+          `
+          SELECT 
+            gd.*,
+            la.name as lawyer_name,
+            la.photo_url as lawyer_photo
+          FROM group_documents gd
+          JOIN lawyer_accounts la ON gd.lawyer_account = la.account
+          WHERE gd.group_id = ?
+          ORDER BY gd.created_at DESC
+        `
+        )
+        .all(groupId) as any[];
+
+      const documentsWithStatus = await Promise.all(
+        allDocuments.map(async (doc) => {
+          try {
+            const escrowAddress = db
+              .query(
+                "SELECT escrow_contract_address FROM lawyer_groups WHERE id = ?"
+              )
+              .get(groupId) as { escrow_contract_address: string } | null;
+
+            if (!escrowAddress?.escrow_contract_address) {
+              return {
+                id: doc.id,
+                title: doc.title,
+                description: doc.description,
+                paymentRequired: doc.payment_required,
+                status: "locked",
+                canAccess: false,
+                createdAt: doc.created_at,
+                lawyer: {
+                  name: doc.lawyer_name,
+                  photoUrl: doc.lawyer_photo,
+                },
+              };
+            }
+
+            const escrowContract = contracts.BrieflyEscrow(
+              escrowAddress.escrow_contract_address as `0x${string}`
+            );
+
+            const isUnlocked = await escrowContract.read.isDocumentUnlocked([
+              BigInt(doc.contract_document_id),
+            ]);
+
+            const status = isUnlocked ? "unlocked" : "locked";
+
+            if (status === "unlocked" && doc.status === "locked") {
+              db.query(
+                "UPDATE group_documents SET status = 'unlocked', unlocked_at = CURRENT_TIMESTAMP WHERE id = ?"
+              ).run(doc.id);
+            }
+
+            return {
+              id: doc.id,
+              title: doc.title,
+              description: doc.description,
+              paymentRequired: doc.payment_required,
+              status,
+              canAccess: isUnlocked,
+              createdAt: doc.created_at,
+              lawyer: {
+                name: doc.lawyer_name,
+                photoUrl: doc.lawyer_photo,
+              },
+            };
+          } catch (error) {
+            console.error("Error checking document status:", error);
+            return {
+              id: doc.id,
+              title: doc.title,
+              description: doc.description,
+              paymentRequired: doc.payment_required,
+              status: "locked",
+              canAccess: false,
+              createdAt: doc.created_at,
+              lawyer: {
+                name: doc.lawyer_name,
+                photoUrl: doc.lawyer_photo,
+              },
+            };
+          }
+        })
+      );
+
+      const formattedMessages = messages.map((message) => ({
+        id: message.id,
+        messageType: message.message_type,
+        messageContent: message.message_content,
+        sender: {
+          accountId: message.sender_account,
+          name: message.sender_name,
+          photoUrl: message.sender_photo,
+        },
+        document: message.document_id
+          ? {
+              id: message.document_id,
+              title: message.document_title,
+              description: message.document_description,
+              status: message.document_status,
+              paymentRequired: message.document_payment_required,
+            }
+          : null,
+        createdAt: message.created_at,
+        updatedAt: message.updated_at,
+      }));
+
+      return respond.ok(
+        ctx,
+        {
+          messages: formattedMessages,
+          documents: documentsWithStatus,
+          pagination: {
+            page,
+            limit,
+            total: totalMessages.count,
+            totalPages: Math.ceil(totalMessages.count / limit),
+          },
+        },
+        "Messages retrieved successfully",
+        200
+      );
+    } catch (error) {
+      console.error("Error fetching messages:", error);
+      return respond.err(ctx, "Failed to fetch messages", 500);
     }
   });
 
