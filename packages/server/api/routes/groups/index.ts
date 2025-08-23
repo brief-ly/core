@@ -13,6 +13,7 @@ import { contracts, evmClient } from "@/api/lib/evm";
 import { decryptFile } from "@/api/lib/utils/encryption";
 import { getFromIPFS } from "@/api/lib/utils/ipfs";
 import * as viem from "viem";
+import { groupChatWS } from "@/api/lib/websocket/groupChat";
 
 const groups = new Hono()
   .get("/:groupId", ensureUser, async (ctx) => {
@@ -670,6 +671,13 @@ const groups = new Hono()
           documentResult.id
         );
 
+        groupChatWS.notifyGroup(groupId, {
+          type: "document_added",
+          documentId: documentResult.id,
+          title,
+          description,
+        });
+
         return respond.ok(
           ctx,
           {
@@ -1044,24 +1052,26 @@ const groups = new Hono()
           )
           .get(user.id) as any;
 
-        return respond.ok(
-          ctx,
-          {
-            messageId: messageResult.id,
-            groupId,
-            messageType,
-            messageContent,
-            documentId: documentId || null,
-            sender: {
-              accountId: user.id,
-              name: senderInfo?.sender_name || "Unknown",
-              photoUrl: senderInfo?.sender_photo || null,
-            },
-            createdAt: messageResult.created_at,
+        const messageData = {
+          messageId: messageResult.id,
+          groupId,
+          messageType,
+          messageContent,
+          documentId: documentId || null,
+          sender: {
+            accountId: user.id,
+            name: senderInfo?.sender_name || "Unknown",
+            photoUrl: senderInfo?.sender_photo || null,
           },
-          "Message sent successfully",
-          201
-        );
+          createdAt: messageResult.created_at,
+        };
+
+        groupChatWS.notifyGroup(groupId, {
+          type: "new_message",
+          message: messageData,
+        });
+
+        return respond.ok(ctx, messageData, "Message sent successfully", 201);
       } catch (error) {
         console.error("Error sending message:", error);
         return respond.err(ctx, "Failed to send message", 500);

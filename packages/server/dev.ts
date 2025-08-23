@@ -1,6 +1,11 @@
 import hono from "./api";
 import { db, runMigrations, initializeDatabase } from "./api/lib/data/db";
 import { startRequestExpirationJob } from "./api/lib/utils/requestJobs";
+import {
+  handleGroupChatWebSocket,
+  handleWebSocketMessage,
+  handleWebSocketClose,
+} from "./api/lib/websocket/handler";
 import html from "./src/index.html";
 
 await initializeDatabase();
@@ -23,7 +28,6 @@ const server = Bun.serve({
         version: "v1.0.0",
       })
     ),
-    // CATCHES ONLY GET REQUESTS
     "/api/v1/*": (req) => {
       return hono.fetch(req);
     },
@@ -38,13 +42,42 @@ const server = Bun.serve({
     "/*": html,
   },
 
+  websocket: {
+    open(ws) {
+      const req = ws.data as Request;
+      const url = new URL(req.url);
+      if (url.pathname === "/ws/group-chat") {
+        handleGroupChatWebSocket(ws, req);
+      }
+    },
+    message(ws, message) {
+      handleWebSocketMessage(ws, message);
+    },
+    close(ws) {
+      handleWebSocketClose(ws);
+    },
+  },
+
   fetch(req) {
-    // CATCHES ALL OTHER METHODS
+    const url = new URL(req.url);
+
+    if (
+      url.pathname === "/ws/group-chat" &&
+      req.headers.get("upgrade") === "websocket"
+    ) {
+      const success = server.upgrade(req, {
+        data: req,
+      });
+      if (success) {
+        return undefined;
+      }
+      return new Response("WebSocket upgrade failed", { status: 400 });
+    }
+
     if (req.url.includes("/api/v1")) {
       return hono.fetch(req);
     }
 
-    // Handle static files in fetch handler as well (for non-GET requests)
     if (req.url.includes("/static/")) {
       const url = new URL(req.url);
       const filePath = url.pathname.replace("/static/", "");

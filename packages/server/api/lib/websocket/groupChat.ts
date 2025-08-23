@@ -6,8 +6,13 @@ interface GroupConnection {
 
 class GroupChatWebSocketManager {
   private connections = new Map<string, GroupConnection>();
-  
-  addConnection(connectionId: string, ws: any, userId: number, groupId: number) {
+
+  addConnection(
+    connectionId: string,
+    ws: any,
+    userId: number,
+    groupId: number
+  ) {
     this.connections.set(connectionId, { ws, userId, groupId });
   }
 
@@ -19,13 +24,18 @@ class GroupChatWebSocketManager {
     for (const [connectionId, connection] of this.connections) {
       if (connection.groupId === groupId) {
         try {
-          connection.ws.send(JSON.stringify({
-            type: "group_message_update",
-            groupId,
-            data: message
-          }));
+          connection.ws.send(
+            JSON.stringify({
+              type: "group_message_update",
+              groupId,
+              data: message,
+            })
+          );
         } catch (error) {
-          console.error(`Failed to send message to connection ${connectionId}:`, error);
+          console.error(
+            `Failed to send message to connection ${connectionId}:`,
+            error
+          );
           this.connections.delete(connectionId);
         }
       }
@@ -34,7 +44,7 @@ class GroupChatWebSocketManager {
 
   getGroupConnections(groupId: number): GroupConnection[] {
     return Array.from(this.connections.values()).filter(
-      conn => conn.groupId === groupId
+      (conn) => conn.groupId === groupId
     );
   }
 }
