@@ -3,6 +3,7 @@ import { Target, Users, Badge, Send } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 import { Button } from "@/src/lib/components/ui/button";
 import { useApi } from "@/src/lib/hooks/use-api";
+import { useNavigate } from "@tanstack/react-router";
 import LawyerCard from "./LawyerCard";
 import Icon from "@/src/lib/components/custom/Icon";
 
@@ -37,6 +38,7 @@ export default function SearchResults({
 }: SearchResultsProps) {
   console.log({ results });
   
+  const navigate = useNavigate();
   const { createGroupRequest } = useApi();
 
   const handleRequestConsultation = (groupId: number, groupName: string) => {
@@ -44,6 +46,13 @@ export default function SearchResults({
       groupId,
       currentSituation: searchQuery,
       futurePlans: `I would like to get legal consultation from the ${groupName} team regarding my situation: ${searchQuery}. I'm looking for professional guidance and next steps to resolve this matter effectively.`
+    }, {
+      onSuccess: () => {
+        // Navigate to group chat after successful request
+        setTimeout(() => {
+          navigate({ to: '/group-chat/$groupId', params: { groupId: groupId.toString() } });
+        }, 1500); // Give time for success toast to show
+      }
     });
   };
   

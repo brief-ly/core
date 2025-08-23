@@ -8,6 +8,7 @@ import { withPageErrorBoundary } from "@/src/lib/components/errors/PageErrorBoun
 import HomePage from "./home";
 import ProfilePage from "./profile";
 import OnboardingPage from "./onboarding";
+import GroupChatPage from "./group-chat";
 import { useAnalytics } from '../lib/hooks/use-analytics';
 
 const rootRoute = createRootRoute({
@@ -51,7 +52,15 @@ const onboardingRoute = createRoute({
   },
 })
 
-const routeTree = rootRoute.addChildren([indexRoute, profileRoute, onboardingRoute])
+const groupChatRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/group-chat/$groupId',
+  component: function GroupChat() {
+    return withPageErrorBoundary(GroupChatPage)({});
+  },
+})
+
+const routeTree = rootRoute.addChildren([indexRoute, profileRoute, onboardingRoute, groupChatRoute])
 const router = createRouter({
   routeTree,
 })
