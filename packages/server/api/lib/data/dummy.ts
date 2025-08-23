@@ -1,5 +1,5 @@
 import { db } from "./db";
 
-const sql = await Bun.file("./dummy.sql").text();
+const sql = await Bun.file("./api/lib/data/dummy.sql").text();
 
 db.run(sql);

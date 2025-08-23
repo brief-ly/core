@@ -4,20 +4,49 @@ import { useSearch, useNavigate } from "@tanstack/react-router";
 import SearchInterface from "@/src/pages/home/SearchInterface";
 import SearchResults from "@/src/pages/home/SearchResults";
 import { cn } from "@/src/lib/utils";
-import { searchLawyers } from "@/src/data";
-import type { Lawyer } from "@/src/data";
+import type { ApiSearchResponse } from "@/src/data";
+
+// Simplified types for our needs
+interface SimpleLawyer {
+  accountId: string;
+  relevanceScore: number;
+  roleInGroup: string;
+}
+
+interface SimpleGroup {
+  groupName: string;
+  lawyers: SimpleLawyer[];
+  reasoning: string;
+  groupId: number;
+}
 import { useAuthProtection } from "@/src/lib/components/custom/AuthProtector";
 import { useApi } from "@/src/lib/hooks/use-api";
+
+// Helper function to transform API response to simplified format
+const transformApiResponseToSimple = (apiResponse: ApiSearchResponse): SimpleGroup[] => {
+  return apiResponse.groups.map(group => ({
+    groupName: group.groupName,
+    groupId: group.groupId,
+    reasoning: group.reasoning,
+    lawyers: group.lawyers.map(apiLawyer => ({
+      accountId: apiLawyer.accountId,
+      relevanceScore: apiLawyer.relevanceScore,
+      roleInGroup: apiLawyer.roleInGroup,
+    }))
+  }));
+};
 
 export default function HomePage() {
     const search = useSearch({ from: '/' });
     const navigate = useNavigate({ from: '/' });
-    const [isSearching, setIsSearching] = useState(false);
-    const [searchResults, setSearchResults] = useState<Lawyer[]>([]);
+    const [searchResults, setSearchResults] = useState<SimpleGroup[]>([]);
+    const [totalLawyers, setTotalLawyers] = useState<number>(0);
     const [pendingSearchQuery, setPendingSearchQuery] = useState<string | null>(null);
     const { isAuthenticated, isLoading, executeProtected } = useAuthProtection({ showWalletRequired: false });
     const searchQuery = search.q || "";
     const hasSearched = !!searchQuery;
+
+    const { mutateAsync: searchLawyers, isPending: isSearching } = useApi().searchLawyers;
 
     useEffect(() => {
         if (isAuthenticated && pendingSearchQuery) {
@@ -30,7 +59,7 @@ export default function HomePage() {
         const performSearch = async () => {
             if (!searchQuery) {
                 setSearchResults([]);
-                setIsSearching(false);
+                setTotalLawyers(0);
                 return;
             }
             if (isLoading) return;
@@ -41,14 +70,26 @@ export default function HomePage() {
                 }
                 return;
             }
-            setIsSearching(true);
             try {
-                setSearchResults(await searchLawyers(searchQuery));
+                const result = await searchLawyers({
+                    currentSituation: searchQuery,
+                });
+                console.log({ apiSearchResult: result });
+                
+                // Ensure result has the expected structure
+                if (result && result.groups && Array.isArray(result.groups)) {
+                    // Transform API response to simplified format
+                    const simpleGroups = transformApiResponseToSimple(result as ApiSearchResponse);
+                    setSearchResults(simpleGroups);
+                    setTotalLawyers(result.totalLawyers || 0);
+                } else {
+                    setSearchResults([]);
+                    setTotalLawyers(0);
+                }
             } catch {
                 setSearchResults([]);
-            } finally {
-                setIsSearching(false);
-            }
+                setTotalLawyers(0);
+            } 
         };
         performSearch();
     }, [searchQuery, isAuthenticated, isLoading]);

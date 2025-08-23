@@ -31,7 +31,7 @@ const lawyers = new Hono()
       })
     ),
     async (ctx) => {
-      
+
       try {
         const user = ctx.get("user");
         const {
@@ -373,7 +373,7 @@ const lawyers = new Hono()
       return respond.err(ctx, "Failed to fetch verified lawyers", 500);
     }
   })
-  .get("/:walletAddress", async (ctx) => {
+  .get("/findByWalletAddress/:walletAddress", async (ctx) => {
     try {
       const walletAddress = ctx.req.param("walletAddress");
 
@@ -396,6 +396,79 @@ const lawyers = new Hono()
         )
         .get(walletAddress) as any;
 
+      if (!lawyerProfile) {
+        return respond.err(ctx, "Lawyer profile not found", 404);
+      }
+
+      const jurisdictions = lawyerProfile.jurisdictions
+        ? lawyerProfile.jurisdictions.split(",")
+        : [];
+
+      const labels = lawyerProfile.labels
+        ? lawyerProfile.labels.split(",")
+        : [];
+
+      return respond.ok(
+        ctx,
+        {
+          accountId: lawyerProfile.account,
+          walletAddress: lawyerProfile.wallet_address,
+          name: lawyerProfile.name,
+          photoUrl: lawyerProfile.photo_url,
+          bio: lawyerProfile.bio,
+          expertise: lawyerProfile.expertise,
+          jurisdictions,
+          labels,
+          consultationFee: lawyerProfile.consultation_fee,
+          nftTokenId: lawyerProfile.nft_token_id,
+          verifiedAt: lawyerProfile.verified_at,
+          createdAt: lawyerProfile.created_at,
+        },
+        "Lawyer profile retrieved successfully",
+        200
+      );
+    } catch (error) {
+      console.error("Error fetching lawyer profile:", error);
+      return respond.err(ctx, "Failed to fetch lawyer profile", 500);
+    }
+  })
+  .get("/findByAccountId/:accountId", async (ctx) => {
+    try {
+      const accountId = ctx.req.param("accountId");
+
+      const lawyerProfile = db
+        .query(
+          `
+            SELECT 
+              la.*,
+              a.wallet_address,
+              GROUP_CONCAT(DISTINCT lj.jurisdiction) as jurisdictions,
+              GROUP_CONCAT(DISTINCT ll.label) as labels
+            FROM lawyer_accounts la
+            JOIN account a ON la.account = a.id
+            LEFT JOIN lawyer_jurisdictions lj ON la.account = lj.account
+            LEFT JOIN lawyer_labels ll ON la.account = ll.account
+            WHERE la.account = ? AND la.verified_at IS NOT NULL
+            GROUP BY la.account
+            LIMIT 1
+          `
+        )
+        .get(accountId) as {
+          account: string;
+          wallet_address: string;
+          name: string;
+          photo_url: string;
+          bio: string;
+          expertise: string;
+          jurisdictions: string;
+          labels: string;
+          consultation_fee: number;
+          nft_token_id: number;
+          verified_at: string;
+          created_at: string;
+        };
+
+      console.log({ lawyerProfile });
       if (!lawyerProfile) {
         return respond.err(ctx, "Lawyer profile not found", 404);
       }
@@ -614,6 +687,8 @@ const lawyers = new Hono()
       try {
         const { currentSituation, futurePlans } = ctx.req.valid("json");
 
+        console.log({ currentSituation, futurePlans });
+
         const verifiedLawyers = db
           .query(
             `
@@ -755,12 +830,11 @@ Please create optimal groups of lawyers (1-5 per group) that can best address th
         const enrichedGroups =
           result.groups?.map((group: any) => {
             const groupLawyers = group.lawyers?.map((lawyer: any) => {
-              const fullLawyerData = formattedLawyers.find(
-                (l) => l.accountId === lawyer.accountId
-              );
+              // Return complete lawyer metadata
               return {
-                ...lawyer,
-                ...fullLawyerData,
+                accountId: lawyer.accountId,
+                relevanceScore: lawyer.relevanceScore,
+                roleInGroup: lawyer.roleInGroup,
               };
             });
 
@@ -789,7 +863,8 @@ Please create optimal groups of lawyers (1-5 per group) that can best address th
             }
 
             return {
-              ...group,
+              groupName: group.groupName,
+              reasoning: group.reasoning,
               groupId: groupId.id,
               lawyers: groupLawyers,
             };

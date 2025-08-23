@@ -1,6 +1,7 @@
 import { Link, useLocation } from "@tanstack/react-router";
 import { Image } from "../custom/Image";
 import { Connect } from "./Connect";
+import { NotificationBell } from "../ui/notification-bell";
 
 export default function Navbar() {
   const location = useLocation();
@@ -15,6 +16,7 @@ export default function Navbar() {
 
       {/* top right - user dropdown */}
       <div className="flex items-center gap-4">
+        <NotificationBell />
         <Connect />
       </div>
     </nav>
