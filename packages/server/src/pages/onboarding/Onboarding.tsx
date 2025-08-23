@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { motion } from "motion/react";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import OnboardingForm from "./OnboardingForm";
 import { cn } from "@/src/lib/utils";
 import Icon from "@/src/lib/components/custom/Icon";
 import { useApi } from "@/src/lib/hooks/use-api";
+import { Button } from "@/src/lib/components/ui/button";
+import { usePrivy } from "@privy-io/react-auth";
 
 interface OnboardingFormData {
   name: string;
@@ -20,6 +22,8 @@ export default function Onboarding() {
   const navigate = useNavigate();
   const { submitLawyerApplication, uploadFile } = useApi();
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const { user } = usePrivy();
+  const walletAddress = user?.wallet?.address;
 
   const { data: statusData, isSuccess: isStatusSuccess } = useApi().getLawyerApplicationStatus();
   console.log({ statusData, isStatusSuccess });
@@ -62,6 +66,7 @@ export default function Onboarding() {
       // Convert consultation fees to number
       const consultationFee = data.consultationFees ? parseFloat(data.consultationFees) : 0;
 
+      console.log(" uploading works ");
       // Submit the lawyer application
       await submitLawyerApplication.mutateAsync({
         name: data.name,
@@ -73,6 +78,7 @@ export default function Onboarding() {
         verificationDocuments: verificationDocumentUrls,
       });
 
+      console.log(" submitting works ");
       setSubmitSuccess(true);
 
       // Redirect after success message
@@ -95,6 +101,58 @@ export default function Onboarding() {
       navigate({ to: '/', search: { q: '' } });
     }
   };
+
+  if (isStatusSuccess) {
+    if (statusData.verifiedAt) {
+      return (
+        <div className="bg-gradient-to-b from-background via-primary/10 dark:via-primary/20 to-primary/20 dark:to-primary/30 min-h-screen flex flex-col items-center justify-center">
+          <div className="max-w-2xl mx-auto text-center">
+            <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
+              <Icon name="CircleCheck" className="w-8 h-8 text-green-600 dark:text-green-400" />
+            </div>
+            <h1 className="text-xl font-bold mb-4">Application Verified!</h1>
+            <p className="text-muted-foreground text-base mb-6">
+              Your application has been verified. You can now start connecting with clients and growing your practice.
+            </p>
+          </div>
+
+          <div className="flex gap-4">
+            <Button asChild variant="primary">
+              <Link to="/profile/$id" params={{ id: walletAddress || '' }}>View Profile</Link>
+            </Button>
+
+            <Button asChild variant="outline">
+              <Link to="/" search={{ q: '' }}>Back to Home</Link>
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    if (!statusData.verifiedAt) {
+      return (
+        <div className="bg-gradient-to-b from-background via-primary/10 dark:via-primary/20 to-primary/20 dark:to-primary/30 min-h-screen flex flex-col items-center justify-center">
+          <div className="max-w-2xl mx-auto text-center">
+            <div className="w-16 h-16 bg-yellow-100 dark:bg-yellow-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
+              <Icon name="CircleCheck" className="w-8 h-8 text-yellow-600 dark:text-yellow-400" />
+            </div>
+            <h1 className="text-xl font-bold mb-4">Application Pending</h1>
+            <p className="text-muted-foreground text-base mb-6">Your application is pending review. Please wait for our team to review your documents and credentials.</p>
+          </div>
+
+          <div className="flex gap-4">
+            <Button asChild variant="primary">
+              <Link to="/profile/$id" params={{ id: walletAddress || '' }}>View Profile</Link>
+            </Button>
+
+            <Button asChild variant="outline">
+              <Link to="/" search={{ q: '' }}>Back to Home</Link>
+            </Button>
+          </div>
+        </div>
+      );
+    }
+  }
 
   if (submitSuccess) {
     return (

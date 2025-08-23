@@ -1,36 +1,99 @@
-import { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import { useParams, useNavigate } from "@tanstack/react-router";
 import { Star, MapPin, Clock, Users, Shield, MessageCircle, Award, BookOpen, Languages, Calendar, CheckCircle } from "lucide-react";
 import { Button } from "@/src/lib/components/ui/button";
 import { cn } from "@/src/lib/utils";
-import { getLawyerById, type Lawyer } from "@/src/data";
 import Icon from "@/src/lib/components/custom/Icon";
 import { ProfileSkeleton } from "./ProfileSkeleton";
+import { useApi } from "@/src/lib/hooks/use-api";
+
+// Interface for API lawyer profile response
+interface ApiLawyerProfile {
+  accountId: number;
+  walletAddress: string;
+  name: string;
+  photoUrl: string;
+  bio: string;
+  expertise: string;
+  jurisdictions: string[];
+  labels: string[];
+  consultationFee: number;
+  nftTokenId: number | null;
+  verifiedAt: string;
+  createdAt: string;
+}
+
+// Interface for the transformed lawyer data used in the component
+interface Lawyer {
+  id: string;
+  name: string;
+  title: string;
+  location: string;
+  rating: number;
+  reviewCount: number;
+  specialties: string[];
+  avatar: string;
+  description: string;
+  responseTime: string;
+  isTeam: boolean;
+  teamSize?: number;
+  isVerified: boolean;
+  completedCases: number;
+  yearsExperience: number;
+  education: string[];
+  languages: string[];
+  availability: 'Available' | 'Busy' | 'Away';
+  consultationFee: number;
+  aboutMe?: string;
+  certifications: string[];
+  caseResults: string[];
+  testimonials: {
+    id: string;
+    clientName: string;
+    rating: number;
+    comment: string;
+    date: string;
+    caseType: string;
+  }[];
+}
 
 export default function Profile() {
   const { id } = useParams({ from: '/profile/$id' });
   const navigate = useNavigate();
-  const [lawyer, setLawyer] = useState<Lawyer | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const { getLawyerProfileByWallet } = useApi();
+  
+  // Fetch lawyer profile from API
+  const { data: apiLawyer, isLoading, error: apiError } = getLawyerProfileByWallet(id || "");
+  
+  // Transform API lawyer data to match the Lawyer interface
+  const lawyer = apiLawyer ? transformApiLawyerToLawyer(apiLawyer) : null;
 
-  useEffect(() => {
-    const fetchLawyer = async () => {
-      if (!id) return;
-
-      setIsLoading(true);
-      try {
-        const lawyerData = await getLawyerById(id);
-        setLawyer(lawyerData);
-      } catch (error) {
-        console.error("Failed to fetch lawyer profile:", error);
-      } finally {
-        setIsLoading(false);
-      }
+  function transformApiLawyerToLawyer(apiLawyer: ApiLawyerProfile): Lawyer {
+    return {
+      id: apiLawyer.walletAddress,
+      name: apiLawyer.name,
+      title: apiLawyer.expertise,
+      location: apiLawyer.jurisdictions.join(", "),
+      rating: 4.8, // Default rating since API doesn't provide it
+      reviewCount: 0, // Default since API doesn't provide it
+      specialties: [...apiLawyer.jurisdictions, ...apiLawyer.labels],
+      avatar: apiLawyer.name.split(" ").map(n => n[0]).join("").toUpperCase(),
+      description: apiLawyer.bio,
+      responseTime: "Usually responds within 24 hours",
+      isTeam: false,
+      isVerified: !!apiLawyer.verifiedAt,
+      completedCases: 0, // Default since API doesn't provide it
+      yearsExperience: 5, // Default since API doesn't provide it
+      education: [], // Default since API doesn't provide it
+      languages: ["English"], // Default since API doesn't provide it
+      availability: "Available" as const,
+      consultationFee: apiLawyer.consultationFee,
+      aboutMe: apiLawyer.bio,
+      certifications: [], // Default since API doesn't provide it
+      caseResults: [], // Default since API doesn't provide it
+      testimonials: [], // Default since API doesn't provide it
     };
-
-    fetchLawyer();
-  }, [id]);
+  }
 
   const handleContactLawyer = () => {
     // Implement contact functionality
@@ -61,8 +124,15 @@ export default function Profile() {
       <div className="bg-gradient-to-b from-background via-primary/10 dark:via-primary/20 to-primary/20 dark:to-primary/30 min-h-screen">
         <div className="container mx-auto px-4 sm:px-6 py-6 sm:py-8">
           <div className="max-w-4xl mx-auto text-center">
-            <h1 className="text-2xl font-bold mb-4">Lawyer Not Found</h1>
-            <p className="text-muted-foreground mb-6">The lawyer profile you're looking for doesn't exist.</p>
+            <h1 className="text-2xl font-bold mb-4">
+              {apiError ? "Error Loading Profile" : "Lawyer Not Found"}
+            </h1>
+            <p className="text-muted-foreground mb-6">
+              {apiError 
+                ? "Failed to load lawyer profile. Please check the wallet address and try again." 
+                : "The lawyer profile you're looking for doesn't exist or hasn't been verified yet."
+              }
+            </p>
             <Button onClick={handleGoBack} className="rounded-xl">
               Go Back
             </Button>

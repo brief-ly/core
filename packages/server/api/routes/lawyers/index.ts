@@ -373,6 +373,65 @@ const lawyers = new Hono()
       return respond.err(ctx, "Failed to fetch verified lawyers", 500);
     }
   })
+  .get("/:walletAddress", async (ctx) => {
+    try {
+      const walletAddress = ctx.req.param("walletAddress");
+
+      const lawyerProfile = db
+        .query(
+          `
+            SELECT 
+              la.*,
+              a.wallet_address,
+              GROUP_CONCAT(DISTINCT lj.jurisdiction) as jurisdictions,
+              GROUP_CONCAT(DISTINCT ll.label) as labels
+            FROM lawyer_accounts la
+            JOIN account a ON la.account = a.id
+            LEFT JOIN lawyer_jurisdictions lj ON la.account = lj.account
+            LEFT JOIN lawyer_labels ll ON la.account = ll.account
+            WHERE a.wallet_address = ? AND la.verified_at IS NOT NULL
+            GROUP BY la.account
+            LIMIT 1
+          `
+        )
+        .get(walletAddress) as any;
+
+      if (!lawyerProfile) {
+        return respond.err(ctx, "Lawyer profile not found", 404);
+      }
+
+      const jurisdictions = lawyerProfile.jurisdictions
+        ? lawyerProfile.jurisdictions.split(",")
+        : [];
+
+      const labels = lawyerProfile.labels
+        ? lawyerProfile.labels.split(",")
+        : [];
+
+      return respond.ok(
+        ctx,
+        {
+          accountId: lawyerProfile.account,
+          walletAddress: lawyerProfile.wallet_address,
+          name: lawyerProfile.name,
+          photoUrl: lawyerProfile.photo_url,
+          bio: lawyerProfile.bio,
+          expertise: lawyerProfile.expertise,
+          jurisdictions,
+          labels,
+          consultationFee: lawyerProfile.consultation_fee,
+          nftTokenId: lawyerProfile.nft_token_id,
+          verifiedAt: lawyerProfile.verified_at,
+          createdAt: lawyerProfile.created_at,
+        },
+        "Lawyer profile retrieved successfully",
+        200
+      );
+    } catch (error) {
+      console.error("Error fetching lawyer profile:", error);
+      return respond.err(ctx, "Failed to fetch lawyer profile", 500);
+    }
+  })
   .patch(
     "/profile",
     ensureUser,
