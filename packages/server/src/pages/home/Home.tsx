@@ -6,19 +6,25 @@ import SearchResults from "@/src/pages/home/SearchResults";
 import { cn } from "@/src/lib/utils";
 import { searchLawyers } from "@/src/data";
 import type { Lawyer } from "@/src/data";
+import { useAuthProtection } from "@/src/lib/components/custom/AuthProtector";
 
 export default function HomePage() {
     const search = useSearch({ from: '/' });
     const navigate = useNavigate({ from: '/' });
-    
     const [isSearching, setIsSearching] = useState(false);
     const [searchResults, setSearchResults] = useState<Lawyer[]>([]);
-
-    // Get search query from URL
+    const [pendingSearchQuery, setPendingSearchQuery] = useState<string | null>(null);
+    const { isAuthenticated, isLoading, executeProtected } = useAuthProtection({ showWalletRequired: false });
     const searchQuery = search.q || "";
     const hasSearched = !!searchQuery;
 
-    // Perform search when URL changes
+    useEffect(() => {
+        if (isAuthenticated && pendingSearchQuery) {
+            navigate({ to: '/', search: { q: pendingSearchQuery.trim() } });
+            setPendingSearchQuery(null);
+        }
+    }, [isAuthenticated, pendingSearchQuery, navigate]);
+
     useEffect(() => {
         const performSearch = async () => {
             if (!searchQuery) {
@@ -26,52 +32,50 @@ export default function HomePage() {
                 setIsSearching(false);
                 return;
             }
-
+            if (isLoading) return;
+            if (!isAuthenticated) {
+                if (!pendingSearchQuery) {
+                    setPendingSearchQuery(searchQuery);
+                    executeProtected(async () => {}).catch(() => setPendingSearchQuery(null));
+                }
+                return;
+            }
             setIsSearching(true);
             try {
-                const results = await searchLawyers(searchQuery);
-                setSearchResults(results);
-            } catch (error) {
-                console.error("Search failed:", error);
+                setSearchResults(await searchLawyers(searchQuery));
+            } catch {
+                setSearchResults([]);
             } finally {
                 setIsSearching(false);
             }
         };
-
         performSearch();
-    }, [searchQuery]);
+    }, [searchQuery, isAuthenticated, isLoading]);
 
     const handleSearch = async (query: string) => {
-        // Update URL with search query
-        await navigate({
-            to: '/',
-            search: { q: query.trim() },
-        });
+        if (!isAuthenticated && !isLoading) {
+            setPendingSearchQuery(query);
+            await executeProtected(async () => {});
+        } else if (isAuthenticated) {
+            await navigate({ to: '/', search: { q: query.trim() } });
+        }
     };
 
     const handleContactLawyer = (lawyerId: string) => {
-        // Implement contact functionality
         console.log("Contacting lawyer with ID:", lawyerId);
-        // This could open a modal, navigate to a chat page, etc.
     };
 
     const handleClear = async () => {
-        // Clear URL search params
-        await navigate({
-            to: '/',
-            search: {},
-        });
-        // Scroll to top and reset any focus states
+        await navigate({ to: '/', search: {} });
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     return (
         <div className={cn(
-            "bg-gradient-to-b from-background via-primary/10 dark:via-primary/10 to-primary/20 dark:to-primary/5",
+            "min-h-[calc(100dvh-var(--navbar-height))] bg-gradient-to-b from-background via-primary/10 dark:via-primary/10 to-primary/20 dark:to-primary/5",
             hasSearched ? "pb-16" : ""
         )}>
             <div className="relative">
-                {/* Main container */}
                 <motion.div
                     className={cn(
                         "container mx-auto px-4 sm:px-6 transition-all duration-700",
@@ -80,7 +84,6 @@ export default function HomePage() {
                             : "flex items-center justify-center h-[calc(100dvh-var(--navbar-height))] py-16"
                     )}
                 >
-                    {/* Search Interface */}
                     <SearchInterface
                         onSearch={handleSearch}
                         isSearching={isSearching}
@@ -88,9 +91,7 @@ export default function HomePage() {
                         onClear={handleClear}
                         currentQuery={searchQuery}
                     />
-
-                    {/* Search Results */}
-                    {hasSearched && (
+                    {hasSearched && (isAuthenticated || isSearching) && (
                         <SearchResults
                             results={searchResults}
                             isLoading={isSearching}

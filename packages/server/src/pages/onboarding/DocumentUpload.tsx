@@ -150,7 +150,7 @@ export default function DocumentUpload({
           </div>
 
           {documents.length < maxFiles && (
-            <Button 
+            <Button s
               type="button"
               variant="outline" 
               size="sm"

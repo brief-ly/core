@@ -65,7 +65,7 @@ export default function SearchInterface({
           hasSearched && "pointer-events-none"
         )}
       >
-        <h1 className="text-4xl sm:text-6xl md:text-7xl font-bold bg-gradient-to-br from-foreground to-foreground/70 bg-clip-text text-transparent mb-4">
+        <h1 className="text-6xl md:text-7xl font-bold bg-gradient-to-br from-foreground to-foreground/70 bg-clip-text text-transparent mb-4">
           Briefly.
         </h1>
         <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto px-4">

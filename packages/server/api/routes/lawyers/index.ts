@@ -8,7 +8,7 @@ import { db } from "@/api/lib/data/db";
 import { Agent } from "@/agent";
 import { contracts, evmClient } from "@/api/lib/evm";
 
-export default new Hono()
+const lawyers = new Hono()
   .post(
     "/request",
     ensureUser,
@@ -707,3 +707,7 @@ Please create optimal groups of lawyers (1-5 per group) that can best address th
       }
     }
   );
+
+
+export default lawyers;
+export type LawyersType = typeof lawyers;
