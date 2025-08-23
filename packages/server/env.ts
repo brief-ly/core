@@ -9,6 +9,8 @@ const envKeys = [
   "BUN_PUBLIC_PRIVY_APP_ID",
   "PVT_KEY",
   "GOOGLE_API_KEY",
+  "PINATA_JWT",
+  "BUN_PUBLIC_PINATA_GATEWAY_URL",
 ] as const;
 
 type ENV = Record<(typeof envKeys)[number], string>;

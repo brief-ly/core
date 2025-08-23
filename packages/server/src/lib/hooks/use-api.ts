@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import client from "../utils/api-client";
 import { toast } from "sonner";
-import { usePrivy } from "@privy-io/react-auth";
+import { usePrivy, useToken } from "@privy-io/react-auth";
 import { useEffect, useState } from "react";
 
 export function useApi() {
@@ -17,17 +17,24 @@ export function useApi() {
     }, [ready, user, authenticated]);
 
     return {
-        welcome: useMutation({
-            mutationFn: async (name: string) => {
-                const result = await client.example.index.$get({
-                    query: {
-                        name,
-                    },
+        // Lawyer Application
+        submitLawyerApplication: useMutation({
+            mutationFn: async (data: {
+                name: string;
+                photoUrl: string;
+                bio: string;
+                expertise: string;
+                jurisdictions: string[];
+                consultationFee: number;
+                verificationDocuments?: string[];
+            }) => {
+                const result = await client.lawyers.request.$post({
+                    json: data,
                 }, {
                     headers: {
                         Authorization: accessToken ? `Bearer ${accessToken}` : "",
                     },
-                })
+                });
 
                 const parsed = await result.json();
 
@@ -38,17 +45,91 @@ export function useApi() {
                 return parsed.data;
             },
             onSuccess: (res) => {
-                toast.success(`Success: ${res.name}`);
+                toast.success("Lawyer application submitted successfully!");
+                console.log(res);
             },
             onError: (err) => {
                 console.error(err);
-                toast.error("Failed to fetch data");
+                toast.error("Failed to submit lawyer application");
             }
         }),
 
+        // Get Lawyer Application Status
+        getLawyerApplicationStatus: () => useQuery({
+            queryKey: ["lawyer-application-status"],
+            queryFn: async () => {
+                console.log({ accessToken });
+                const result = await client.lawyers.request.status.$get({
+                    headers: {
+                        Authorization: accessToken ? `Bearer ${accessToken}` : "",
+                    },
+                });
+
+                const parsed = await result.json();
+
+                if (!parsed.success) {
+                    throw new Error(parsed.error);
+                }
+
+                return parsed.data;
+            },
+            enabled: !!accessToken,
+        }),
+
+        // Admin: Approve Lawyer Application
+        approveLawyerApplication: useMutation({
+            mutationFn: async (accountId: string) => {
+                const result = await client.lawyers.approve.$post({
+                    json: { accountId },
+                }, {
+                    headers: {
+                        Authorization: accessToken ? `Bearer ${accessToken}` : "",
+                    },
+                });
+
+                const parsed = await result.json();
+
+                if (!parsed.success) {
+                    throw new Error(parsed.error);
+                }
+
+                return parsed.data;
+            },
+            onSuccess: (res) => {
+                toast.success("Lawyer application approved successfully!");
+            },
+            onError: (err) => {
+                console.error(err);
+                toast.error("Failed to approve lawyer application");
+            }
+        }),
+
+        // Admin: Get Pending Applications
+        getPendingLawyerApplications: () => useQuery({
+            queryKey: ["pending-lawyer-applications"],
+            queryFn: async () => {
+                const result = await client.lawyers.admin.pending.$get({
+                    headers: {
+                        Authorization: accessToken ? `Bearer ${accessToken}` : "",
+                    },
+                });
+
+                const parsed = await result.json();
+
+                if (!parsed.success) {
+                    throw new Error(parsed.error);
+                }
+
+                return parsed.data;
+            },
+            enabled: !!accessToken,
+        }),
+
+        // Get Verified Lawyers
         getVerifiedLawyers: () => useQuery({
             queryKey: ["verified-lawyers"],
             queryFn: async () => {
+                console.log({ accessToken });
                 const result = await client.lawyers.index.$get({
                     headers: {
                         Authorization: accessToken ? `Bearer ${accessToken}` : "",
@@ -63,6 +144,94 @@ export function useApi() {
 
                 return parsed.data;
             }
-        })
+        }),
+
+        // Update Lawyer Profile
+        updateLawyerProfile: useMutation({
+            mutationFn: async (data: {
+                photoUrl?: string;
+                bio?: string;
+                expertise?: string;
+                jurisdictions?: string[];
+                consultationFee?: number;
+            }) => {
+                const result = await client.lawyers.profile.$patch({
+                    json: data,
+                }, {
+                    headers: {
+                        Authorization: accessToken ? `Bearer ${accessToken}` : "",
+                    },
+                });
+
+                const parsed = await result.json();
+
+                if (!parsed.success) {
+                    throw new Error(parsed.error);
+                }
+
+                return parsed.data;
+            },
+            onSuccess: (res) => {
+                toast.success("Profile updated successfully!");
+            },
+            onError: (err) => {
+                console.error(err);
+                toast.error("Failed to update profile");
+            }
+        }),
+
+        // Search Lawyers
+        searchLawyers: useMutation({
+            mutationFn: async (data: {
+                currentSituation: string;
+                futurePlans?: string;
+            }) => {
+                const result = await client.lawyers.search.$post({
+                    json: data,
+                }, {
+                    headers: {
+                        Authorization: accessToken ? `Bearer ${accessToken}` : "",
+                    },
+                });
+
+                const parsed = await result.json();
+
+                if (!parsed.success) {
+                    throw new Error(parsed.error);
+                }
+
+                return parsed.data;
+            },
+            onSuccess: (res) => {
+                toast.success("Lawyer search completed successfully!");
+            },
+            onError: (err) => {
+                console.error(err);
+                toast.error("Failed to search lawyers");
+            }
+        }),
+
+        // Upload File
+        uploadFile: useMutation({
+            mutationFn: async (file: File) => {
+                const result = await client.upload.index.$post({
+                    form: { file },
+                })
+
+                const parsed = await result.json();
+
+                if (!parsed.success) {
+                    throw new Error(parsed.error);
+                }
+
+                return parsed.data;
+            },
+            onSuccess: (res) => {
+                console.log("Successfully uploaded file!", res);
+            },
+            onError: (err) => {
+                console.error(err);
+            }
+        }),
     }
 }

@@ -21,8 +21,9 @@ CREATE TABLE
 
 CREATE TABLE
     IF NOT EXISTS lawyer_jurisdictions (
-        account INTEGER PRIMARY KEY REFERENCES account (id) ON DELETE CASCADE ON UPDATE CASCADE,
-        jurisdiction TEXT NOT NULL
+        account INTEGER REFERENCES account (id) ON DELETE CASCADE ON UPDATE CASCADE,
+        jurisdiction TEXT NOT NULL,
+        PRIMARY KEY (account, jurisdiction)
     );
 
 CREATE TABLE
@@ -96,4 +97,15 @@ CREATE TABLE
         account_id INTEGER REFERENCES account (id) ON DELETE CASCADE,
         access_type TEXT NOT NULL CHECK (access_type IN ('view', 'download')),
         accessed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+CREATE TABLE
+    IF NOT EXISTS lawyer_verification_documents (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        lawyer_account INTEGER REFERENCES account (id) ON DELETE CASCADE,
+        document_url TEXT NOT NULL,
+        document_type TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        ipfs_hash TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );

@@ -9,7 +9,7 @@ import { zEvmAddress } from "../utils/zod";
 
 const ensureUser = createMiddleware<{
   Variables: {
-    user: { id: number; address: Address };
+    user: { id: number; wallet_address: Address };
   };
 }>(async (ctx, next) => {
   const privyUser = await getPrivyUserFromContext(ctx);
@@ -33,15 +33,18 @@ const ensureUser = createMiddleware<{
     user = result;
   }
 
+  console.log({ user });
+
   ctx.set(
     "user",
     z
       .object({
         id: z.number(),
-        address: zEvmAddress(),
+        wallet_address: zEvmAddress(),
       })
       .parse(user)
   );
+
   await next();
 });
 

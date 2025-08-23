@@ -7,6 +7,7 @@ import { cn } from "@/src/lib/utils";
 import { searchLawyers } from "@/src/data";
 import type { Lawyer } from "@/src/data";
 import { useAuthProtection } from "@/src/lib/components/custom/AuthProtector";
+import { useApi } from "@/src/lib/hooks/use-api";
 
 export default function HomePage() {
     const search = useSearch({ from: '/' });
@@ -17,6 +18,9 @@ export default function HomePage() {
     const { isAuthenticated, isLoading, executeProtected } = useAuthProtection({ showWalletRequired: false });
     const searchQuery = search.q || "";
     const hasSearched = !!searchQuery;
+
+    const { data: lawyerData } = useApi().getVerifiedLawyers();
+    console.log({ lawyers: lawyerData?.lawyers });
 
     useEffect(() => {
         if (isAuthenticated && pendingSearchQuery) {
@@ -36,7 +40,7 @@ export default function HomePage() {
             if (!isAuthenticated) {
                 if (!pendingSearchQuery) {
                     setPendingSearchQuery(searchQuery);
-                    executeProtected(async () => {}).catch(() => setPendingSearchQuery(null));
+                    executeProtected(async () => { }).catch(() => setPendingSearchQuery(null));
                 }
                 return;
             }
@@ -55,7 +59,7 @@ export default function HomePage() {
     const handleSearch = async (query: string) => {
         if (!isAuthenticated && !isLoading) {
             setPendingSearchQuery(query);
-            await executeProtected(async () => {});
+            await executeProtected(async () => { });
         } else if (isAuthenticated) {
             await navigate({ to: '/', search: { q: query.trim() } });
         }

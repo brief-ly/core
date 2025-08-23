@@ -4,6 +4,7 @@ import { useNavigate } from "@tanstack/react-router";
 import OnboardingForm from "./OnboardingForm";
 import { cn } from "@/src/lib/utils";
 import Icon from "@/src/lib/components/custom/Icon";
+import { useApi } from "@/src/lib/hooks/use-api";
 
 interface OnboardingFormData {
   name: string;
@@ -11,50 +12,66 @@ interface OnboardingFormData {
   about: string;
   professionalExpertise: string;
   consultationFees: string;
+  jurisdictions: string[];
   verificationDocuments: File[];
 }
 
 export default function Onboarding() {
   const navigate = useNavigate();
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { submitLawyerApplication, uploadFile } = useApi();
   const [submitSuccess, setSubmitSuccess] = useState(false);
 
   const handleFormSubmit = async (data: OnboardingFormData) => {
-    setIsSubmitting(true);
-
     try {
-      // Simulate API call
-      console.log("Submitting onboarding data:", data);
-      
-      // Create FormData for file uploads
-      const formData = new FormData();
-      formData.append("name", data.name);
-      formData.append("about", data.about);
-      formData.append("professionalExpertise", data.professionalExpertise);
-      
-      if (data.consultationFees) {
-        formData.append("consultationFees", data.consultationFees);
-      }
-      
+      // Upload profile photo if it exists
+      let photoUrl = "";
       if (data.profilePhoto) {
-        formData.append("profilePhoto", data.profilePhoto);
+        try {
+          // Ensure file has a name
+          const photoFile = data.profilePhoto.name ? data.profilePhoto : new File([data.profilePhoto], `profile-photo-${Date.now()}.${data.profilePhoto.type.split('/')[1]}`, { type: data.profilePhoto.type });
+          const photoResult = await uploadFile.mutateAsync(photoFile);
+          const gatewayUrl = process.env.BUN_PUBLIC_PINATA_GATEWAY_URL || 'https://gateway.pinata.cloud';
+          photoUrl = `https://${gatewayUrl}/ipfs/${photoResult.cid}`;
+        } catch (uploadError) {
+          console.error("Failed to upload profile photo:", uploadError);
+          throw new Error("Failed to upload profile photo. Please try again.");
+        }
       }
-      
-      data.verificationDocuments.forEach((doc, index) => {
-        formData.append(`verificationDocument_${index}`, doc);
+
+      // Upload verification documents if they exist
+      let verificationDocumentUrls: string[] = [];
+      if (data.verificationDocuments && data.verificationDocuments.length > 0) {
+        try {
+          const uploadPromises = data.verificationDocuments.map((file, index) => {
+            // Ensure each file has a name
+            const namedFile = file.name ? file : new File([file], `document-${index + 1}.pdf`, { type: file.type });
+            return uploadFile.mutateAsync(namedFile);
+          });
+          const documentResults = await Promise.all(uploadPromises);
+          const gatewayUrl = process.env.BUN_PUBLIC_PINATA_GATEWAY_URL || 'https://gateway.pinata.cloud';
+          verificationDocumentUrls = documentResults.map((result: any) => `https://${gatewayUrl}/ipfs/${result.cid}`);
+        } catch (uploadError) {
+          console.error("Failed to upload verification documents:", uploadError);
+          throw new Error("Failed to upload verification documents. Please try again.");
+        }
+      }
+
+      // Convert consultation fees to number
+      const consultationFee = data.consultationFees ? parseFloat(data.consultationFees) : 0;
+
+      // Submit the lawyer application
+      await submitLawyerApplication.mutateAsync({
+        name: data.name,
+        photoUrl,
+        bio: data.about,
+        expertise: data.professionalExpertise,
+        jurisdictions: data.jurisdictions,
+        consultationFee,
+        verificationDocuments: verificationDocumentUrls,
       });
 
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      // TODO: Replace with actual API call
-      // const response = await fetch('/api/lawyers/onboard', {
-      //   method: 'POST',
-      //   body: formData
-      // });
-
       setSubmitSuccess(true);
-      
+
       // Redirect after success message
       setTimeout(() => {
         navigate({ to: '/', search: { q: '' } });
@@ -62,9 +79,7 @@ export default function Onboarding() {
 
     } catch (error) {
       console.error("Onboarding submission failed:", error);
-      // TODO: Add proper error handling/notification
-    } finally {
-      setIsSubmitting(false);
+      // Error handling is already done in the mutation's onError callback
     }
   };
 
@@ -91,13 +106,13 @@ export default function Onboarding() {
               <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
                 <Icon name="CircleCheck" className="w-8 h-8 text-green-600 dark:text-green-400" />
               </div>
-              
+
               <h1 className="text-xl font-bold mb-4">Application Submitted!</h1>
               <p className="text-muted-foreground text-base mb-6">
-                Thank you for your application. Our team will review your documents and credentials, 
+                Thank you for your application. Our team will review your documents and credentials,
                 and we'll get back to you within 2-3 business days.
               </p>
-              
+
               <div className="bg-secondary/50 p-4 mb-6">
                 <h3 className="font-semibold mb-2">What's Next?</h3>
                 <ul className="text-sm text-muted-foreground space-y-1 text-left">
@@ -107,7 +122,7 @@ export default function Onboarding() {
                   <li>• Welcome email with next steps</li>
                 </ul>
               </div>
-              
+
               <p className="text-sm text-muted-foreground">
                 Redirecting to home page in a few seconds...
               </p>
@@ -156,43 +171,12 @@ export default function Onboarding() {
                 Complete your application to start connecting with clients and growing your practice
               </p>
             </motion.div>
-
-            {/* Progress Indicator */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-              className="bg-card border border-border p-6 shadow-sm mb-8"
-            >
-              <div className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-xs font-semibold">
-                    1
-                  </div>
-                  <span className="font-medium">Application Form</span>
-                </div>
-                <Icon name="ArrowRight" className="w-4 h-4 text-muted-foreground" />
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <div className="w-6 h-6 border-2 border-muted-foreground/30 rounded-full flex items-center justify-center text-xs">
-                    2
-                  </div>
-                  <span>Document Review</span>
-                </div>
-                <Icon name="ArrowRight" className="w-4 h-4 text-muted-foreground" />
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <div className="w-6 h-6 border-2 border-muted-foreground/30 rounded-full flex items-center justify-center text-xs">
-                    3
-                  </div>
-                  <span>Profile Activation</span>
-                </div>
-              </div>
-            </motion.div>
           </div>
 
           {/* Form */}
-          <OnboardingForm 
-            onSubmit={handleFormSubmit} 
-            isSubmitting={isSubmitting}
+          <OnboardingForm
+            onSubmit={handleFormSubmit}
+            isSubmitting={submitLawyerApplication.isPending || uploadFile.isPending}
           />
         </motion.div>
       </div>

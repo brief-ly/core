@@ -19,7 +19,7 @@ import {
 import { uploadToIPFS, getFromIPFS } from "@/api/lib/utils/ipfs";
 import * as viem from "viem";
 
-export default new Hono()
+const groups = new Hono()
   .get("/:groupId", ensureUser, async (ctx) => {
     try {
       const groupId = parseInt(ctx.req.param("groupId"));
@@ -613,7 +613,7 @@ export default new Hono()
         const addDocTx = await escrowContract.write.addDocument([
           documentHash,
           BigInt(paymentRequired * 1e18),
-          user.address,
+          user.wallet_address,
           BigInt(groupId),
         ]);
 
@@ -940,3 +940,6 @@ export default new Hono()
       return respond.err(ctx, "Failed to download document", 500);
     }
   });
+
+export default groups;
+export type GroupsType = typeof groups;

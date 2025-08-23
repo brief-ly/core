@@ -6,7 +6,6 @@ export interface Lawyer {
   location: string;
   rating: number;
   reviewCount: number;
-  hourlyRate: number;
   specialties: string[];
   avatar: string;
   description: string;
@@ -16,9 +15,6 @@ export interface Lawyer {
   isVerified: boolean;
   completedCases: number;
   // Profile-specific fields
-  phone?: string;
-  email?: string;
-  website?: string;
   yearsExperience: number;
   education: string[];
   languages: string[];
@@ -63,7 +59,6 @@ export const mockLawyers: Lawyer[] = [
     location: "San Francisco, CA",
     rating: 4.9,
     reviewCount: 127,
-    hourlyRate: 350,
     specialties: ["Contract Law", "Business Formation", "Negotiations"],
     avatar: "SC",
     description: "15+ years helping startups and established businesses navigate complex contracts and business law matters.",
@@ -71,9 +66,6 @@ export const mockLawyers: Lawyer[] = [
     isTeam: false,
     isVerified: true,
     completedCases: 340,
-    phone: "+1 (415) 555-0123",
-    email: "sarah.chen@lawfirm.com",
-    website: "www.sarahchenlaw.com",
     yearsExperience: 15,
     education: ["JD, Stanford Law School", "MBA, UC Berkeley Haas"],
     languages: ["English", "Mandarin", "Spanish"],
@@ -112,7 +104,6 @@ export const mockLawyers: Lawyer[] = [
     location: "New York, NY",
     rating: 4.8,
     reviewCount: 89,
-    hourlyRate: 425,
     specialties: ["Corporate Law", "M&A", "Securities", "Compliance"],
     avatar: "CLT",
     description: "Premier corporate law team with expertise in mergers, acquisitions, and complex business transactions.",
@@ -121,9 +112,6 @@ export const mockLawyers: Lawyer[] = [
     teamSize: 5,
     isVerified: true,
     completedCases: 210,
-    phone: "+1 (212) 555-0456",
-    email: "contact@corporatelegalteam.com",
-    website: "www.corporatelegalteam.com",
     yearsExperience: 12,
     education: ["Harvard Law School", "Columbia Business School", "NYU Law"],
     languages: ["English", "French", "German"],
@@ -154,7 +142,6 @@ export const mockLawyers: Lawyer[] = [
     location: "Austin, TX",
     rating: 4.7,
     reviewCount: 156,
-    hourlyRate: 275,
     specialties: ["Employment Law", "Labor Disputes", "HR Compliance"],
     avatar: "MR",
     description: "Dedicated employment attorney protecting both employers and employees in workplace legal matters.",
@@ -162,9 +149,6 @@ export const mockLawyers: Lawyer[] = [
     isTeam: false,
     isVerified: true,
     completedCases: 445,
-    phone: "+1 (512) 555-0789",
-    email: "michael@rodriguezlaw.com",
-    website: "www.rodriguezemploymentlaw.com",
     yearsExperience: 18,
     education: ["JD, University of Texas School of Law", "LLM, Georgetown University Law Center"],
     languages: ["English", "Spanish"],

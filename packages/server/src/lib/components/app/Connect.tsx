@@ -205,22 +205,17 @@ export function Connect() {
         
         {/* User Actions */}
         <DropdownMenuGroup>
+        <DropdownMenuItem onClick={handleRegisterAsLawyer}>
+            <Icon name="Scale" className="mr-2 h-4 w-4" />
+            <span>Register as a Lawyer</span>
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={handleProfileClick}>
             <Icon name="User" className="mr-2 h-4 w-4" />
-            <span>Profile</span>
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={handleRegisterAsLawyer}>
-            <Icon name="Scale" className="mr-2 h-4 w-4" />
-            <span>Register as a lawyer</span>
+            <span>View Profile</span>
           </DropdownMenuItem>
           <DropdownMenuItem onClick={handleSettingsClick}>
             <Icon name="Settings" className="mr-2 h-4 w-4" />
             <span>Settings</span>
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={handleNotificationsClick}>
-            <Icon name="Bell" className="mr-2 h-4 w-4" />
-            <span>Notifications</span>
-            <DropdownMenuShortcut>⌘N</DropdownMenuShortcut>
           </DropdownMenuItem>
         </DropdownMenuGroup>
         
@@ -280,7 +275,6 @@ export function Connect() {
         <DropdownMenuItem onClick={handleLogout} variant="destructive">
           <Icon name="LogOut" className="mr-2 h-4 w-4" />
           <span>Log out</span>
-          <DropdownMenuShortcut>⌘Q</DropdownMenuShortcut>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

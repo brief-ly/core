@@ -7,7 +7,11 @@ import { rateLimiter } from "hono-rate-limiter";
 import { cors } from "hono/cors";
 
 const hono = new Hono()
-  .use(cors())
+  .use(cors({
+    origin: "*",
+    allowHeaders: ["Content-Type", "Authorization"],
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  }))
   .use(logger())
   .use(trimTrailingSlash())
   .use(

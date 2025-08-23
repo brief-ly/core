@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import { useParams, useNavigate } from "@tanstack/react-router";
-import { Star, MapPin, Clock, Users, Shield, MessageCircle, Phone, Mail, Globe, Award, BookOpen, Languages, Calendar, CheckCircle } from "lucide-react";
+import { Star, MapPin, Clock, Users, Shield, MessageCircle, Award, BookOpen, Languages, Calendar, CheckCircle } from "lucide-react";
 import { Button } from "@/src/lib/components/ui/button";
 import { cn } from "@/src/lib/utils";
 import { getLawyerById, type Lawyer } from "@/src/data";
@@ -158,13 +158,9 @@ export default function Profile() {
                   </div>
 
                   {/* Pricing Section */}
-                  <div className="flex items-center justify-evenly gap-4 bg-secondary/50 rounded-xl p-4 text-center">
+                  <div className="flex items-center justify-center gap-4 bg-secondary/50 rounded-xl p-4 text-center">
                     <div className="text-emerald-500">
-                      <div className="text-2xl sm:text-3xl font-bold">${lawyer.hourlyRate}</div>
-                      <div className="text-xs sm:text-sm text-muted-foreground">per hour</div>
-                    </div>
-                    <div>
-                      <div className="text-lg font-semibold mt-1">${lawyer.consultationFee}</div>
+                      <div className="text-2xl sm:text-3xl font-bold">${lawyer.consultationFee}</div>
                       <div className="text-xs sm:text-sm text-muted-foreground">consultation</div>
                     </div>
                   </div>
@@ -274,35 +270,7 @@ export default function Profile() {
 
             {/* Right Column */}
             <div className="space-y-6">
-              {/* Contact Information */}
-              <motion.div
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="bg-card border border-border rounded-2xl p-6 shadow-sm"
-              >
-                <h2 className="text-lg font-semibold mb-4">Contact Information</h2>
-                <div className="space-y-3">
-                  {lawyer.phone && (
-                    <div className="flex items-center gap-3">
-                      <Phone className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-sm">{lawyer.phone}</span>
-                    </div>
-                  )}
-                  {lawyer.email && (
-                    <div className="flex items-center gap-3">
-                      <Mail className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-sm">{lawyer.email}</span>
-                    </div>
-                  )}
-                  {lawyer.website && (
-                    <div className="flex items-center gap-3">
-                      <Globe className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-sm">{lawyer.website}</span>
-                    </div>
-                  )}
-                </div>
-              </motion.div>
+
 
               {/* Experience & Stats */}
               <motion.div

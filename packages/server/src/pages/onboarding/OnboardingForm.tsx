@@ -14,6 +14,7 @@ interface OnboardingFormData {
   about: string;
   professionalExpertise: string;
   consultationFees: string;
+  jurisdictions: string[];
   verificationDocuments: File[];
 }
 
@@ -29,9 +30,11 @@ export default function OnboardingForm({ onSubmit, isSubmitting }: OnboardingFor
     about: "",
     professionalExpertise: "",
     consultationFees: "",
+    jurisdictions: [],
     verificationDocuments: []
   });
 
+  const [jurisdictionsInput, setJurisdictionsInput] = useState("");
   const [errors, setErrors] = useState<Partial<Record<keyof OnboardingFormData, string>>>({});
 
   const validateForm = (): boolean => {
@@ -45,13 +48,17 @@ export default function OnboardingForm({ onSubmit, isSubmitting }: OnboardingFor
     if (!formData.about.trim()) {
       newErrors.about = "About section is required";
     } else if (formData.about.trim().length < 10) {
-      newErrors.about = "About section must be at least 10 words";
+      newErrors.about = "About section must be at least 10 characters";
     }
 
     if (!formData.professionalExpertise.trim()) {
       newErrors.professionalExpertise = "Professional expertise is required";
     } else if (formData.professionalExpertise.trim().length < 30) {
-      newErrors.professionalExpertise = "Professional expertise must be at least 30 words";
+      newErrors.professionalExpertise = "Professional expertise must be at least 30 characters";
+    }
+
+    if (formData.jurisdictions.length === 0) {
+      newErrors.jurisdictions = "At least one jurisdiction is required";
     }
 
     if (formData.consultationFees && isNaN(Number(formData.consultationFees))) {
@@ -60,6 +67,21 @@ export default function OnboardingForm({ onSubmit, isSubmitting }: OnboardingFor
 
     if (formData.verificationDocuments.length === 0) {
       newErrors.verificationDocuments = "At least one verification document is required";
+    } else {
+      // Check file sizes
+      const maxSize = 5 * 1024 * 1024; // 5MB in bytes
+      const oversizedFiles = formData.verificationDocuments.filter(file => file.size > maxSize);
+      if (oversizedFiles.length > 0) {
+        newErrors.verificationDocuments = `Files exceed 5MB limit: ${oversizedFiles.map(f => f.name).join(', ')}`;
+      }
+    }
+
+    // Check profile photo size if exists
+    if (formData.profilePhoto) {
+      const maxSize = 5 * 1024 * 1024; // 5MB in bytes
+      if (formData.profilePhoto.size > maxSize) {
+        newErrors.profilePhoto = "Profile photo size must be less than 5MB";
+      }
     }
 
     setErrors(newErrors);
@@ -82,11 +104,44 @@ export default function OnboardingForm({ onSubmit, isSubmitting }: OnboardingFor
     }
   };
 
+  const handleJurisdictionsChange = (value: string) => {
+    setJurisdictionsInput(value);
+    
+    // Process jurisdictions only when there's actual content
+    if (value.trim()) {
+      const jurisdictions = value.split(',').map(j => j.trim()).filter(j => j.length > 0);
+      setFormData(prev => ({ ...prev, jurisdictions }));
+    } else {
+      setFormData(prev => ({ ...prev, jurisdictions: [] }));
+    }
+    
+    // Clear error when user starts typing
+    if (errors.jurisdictions) {
+      setErrors(prev => ({ ...prev, jurisdictions: undefined }));
+    }
+  };
+
+  const validateFileSize = (file: File): boolean => {
+    const maxSize = 5 * 1024 * 1024; // 5MB in bytes
+    return file.size <= maxSize;
+  };
+
   const handleProfilePhotoChange = (file: File) => {
+    if (!validateFileSize(file)) {
+      alert("Profile photo size must be less than 5MB");
+      return;
+    }
     setFormData(prev => ({ ...prev, profilePhoto: file }));
   };
 
   const handleDocumentsChange = (documents: File[]) => {
+    // Validate file sizes
+    const invalidFiles = documents.filter(file => !validateFileSize(file));
+    if (invalidFiles.length > 0) {
+      alert(`Some files exceed the 5MB limit: ${invalidFiles.map(f => f.name).join(', ')}`);
+      return;
+    }
+    
     setFormData(prev => ({ ...prev, verificationDocuments: documents }));
     // Clear error when documents are uploaded
     if (errors.verificationDocuments) {
@@ -140,6 +195,12 @@ export default function OnboardingForm({ onSubmit, isSubmitting }: OnboardingFor
                 Profile Photo
               </label>
               <Upload setImage={handleProfilePhotoChange} />
+              {errors.profilePhoto && (
+                <p className="text-sm text-destructive mt-1">{errors.profilePhoto}</p>
+              )}
+              <p className="text-xs text-muted-foreground mt-1">
+                Maximum file size: 5MB. Supported formats: JPG, PNG
+              </p>
             </div>
           </div>
 
@@ -160,7 +221,7 @@ export default function OnboardingForm({ onSubmit, isSubmitting }: OnboardingFor
                 <p className="text-sm text-destructive">{errors.about}</p>
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  Minimum 30 characters. This personal bio will be displayed on your profile.
+                  Minimum 10 characters. This personal bio will be displayed on your profile.
                 </p>
               )}
               <p className="text-xs text-muted-foreground">
@@ -206,12 +267,36 @@ export default function OnboardingForm({ onSubmit, isSubmitting }: OnboardingFor
                 <p className="text-sm text-destructive">{errors.professionalExpertise}</p>
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  Minimum 10 characters. Highlight your key areas of expertise.
+                  Minimum 30 characters. Highlight your key areas of expertise.
                 </p>
               )}
               <p className="text-xs text-muted-foreground">
                 {formData.professionalExpertise.length}/1000
               </p>
+            </div>
+          </div>
+
+          {/* Jurisdictions */}
+          <div>
+            <label htmlFor="jurisdictions" className="text-sm font-medium text-foreground mb-2 block">
+              Jurisdictions *
+            </label>
+            <Input
+              id="jurisdictions"
+              type="text"
+              placeholder="CA, NY, TX (comma-separated)"
+              value={jurisdictionsInput}
+              onChange={(e) => handleJurisdictionsChange(e.target.value)}
+              className={cn(errors.jurisdictions && "border-destructive")}
+            />
+            <div className="flex justify-between items-center mt-1">
+              {errors.jurisdictions ? (
+                <p className="text-sm text-destructive">{errors.jurisdictions}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Enter the states or jurisdictions where you are licensed to practice law.
+                </p>
+              )}
             </div>
           </div>
 
@@ -272,6 +357,9 @@ export default function OnboardingForm({ onSubmit, isSubmitting }: OnboardingFor
         {errors.verificationDocuments && (
           <p className="text-sm text-destructive mt-2">{errors.verificationDocuments}</p>
         )}
+        <p className="text-xs text-muted-foreground mt-2">
+          Maximum file size: 5MB per file. Supported formats: PDF, JPG, PNG, DOC, DOCX
+        </p>
       </motion.div>
 
       {/* Submit Button */}

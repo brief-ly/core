@@ -25,6 +25,9 @@ const lawyers = new Hono()
         consultationFee: z
           .number()
           .min(0, "Consultation fee must be non-negative"),
+        verificationDocuments: z
+          .array(z.string().url("Valid document URL is required"))
+          .optional(),
       })
     ),
     async (ctx) => {
@@ -37,6 +40,7 @@ const lawyers = new Hono()
           expertise,
           jurisdictions,
           consultationFee,
+          verificationDocuments,
         } = ctx.req.valid("json");
 
         const existingLawyer = db
@@ -51,21 +55,35 @@ const lawyers = new Hono()
           );
         }
 
+        const currentTime = new Date().toISOString();
         db.transaction(() => {
           db.query(
             `
-            INSERT INTO lawyer_accounts (account, name, photo_url, bio, expertise, consultation_fee)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO lawyer_accounts (account, name, photo_url, bio, expertise, consultation_fee, verified_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
           `
-          ).run(user.id, name, photoUrl, bio, expertise, consultationFee);
+          ).run(user.id, name, photoUrl, bio, expertise, consultationFee, currentTime);
 
           for (const jurisdiction of jurisdictions) {
             db.query(
               `
-              INSERT INTO lawyer_jurisdictions (account, jurisdiction)
+              INSERT OR IGNORE INTO lawyer_jurisdictions (account, jurisdiction)
               VALUES (?, ?)
             `
             ).run(user.id, jurisdiction);
+          }
+
+          // Save verification documents if provided
+          if (verificationDocuments && verificationDocuments.length > 0) {
+            for (const documentUrl of verificationDocuments) {
+              const ipfsHash = documentUrl.split('/').pop() || '';
+              db.query(
+                `
+                 INSERT INTO lawyer_verification_documents (lawyer_account, document_url, document_type, file_name, ipfs_hash)
+                 VALUES (?, ?, ?, ?, ?)
+               `
+              ).run(user.id, documentUrl, 'verification', 'verification_document', ipfsHash);
+            }
           }
         })();
 
@@ -736,7 +754,6 @@ Please create optimal groups of lawyers (1-5 per group) that can best address th
       }
     }
   );
-
 
 export default lawyers;
 export type LawyersType = typeof lawyers;

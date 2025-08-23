@@ -152,13 +152,9 @@ export default function SearchResults({
                     </div>
                     
                     {/* Pricing Section */}
-                    <div className="flex items-center justify-evenly gap-4 bg-secondary/50 rounded-xl p-3 text-center lg:bg-transparent lg:p-0">
+                    <div className="flex items-center justify-center gap-4 bg-secondary/50 rounded-xl p-3 text-center lg:bg-transparent lg:p-0">
                       <div className="text-emerald-500">
-                        <div className="text-xl sm:text-2xl font-bold">${lawyer.hourlyRate}</div>
-                        <div className="text-xs sm:text-sm text-muted-foreground">per hour</div>
-                      </div>
-                      <div>
-                        <div className="text-base sm:text-lg font-semibold">${lawyer.consultationFee}</div>
+                        <div className="text-xl sm:text-2xl font-bold">${lawyer.consultationFee}</div>
                         <div className="text-xs sm:text-sm text-muted-foreground">consultation</div>
                       </div>
                     </div>
