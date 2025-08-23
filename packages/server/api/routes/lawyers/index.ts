@@ -31,7 +31,6 @@ const lawyers = new Hono()
       })
     ),
     async (ctx) => {
-      
       try {
         const user = ctx.get("user");
         const {
@@ -63,7 +62,15 @@ const lawyers = new Hono()
             INSERT INTO lawyer_accounts (account, name, photo_url, bio, expertise, consultation_fee, verified_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
           `
-          ).run(user.id, name, photoUrl, bio, expertise, consultationFee, currentTime);
+          ).run(
+            user.id,
+            name,
+            photoUrl,
+            bio,
+            expertise,
+            consultationFee,
+            currentTime
+          );
 
           for (const jurisdiction of jurisdictions) {
             db.query(
@@ -77,13 +84,19 @@ const lawyers = new Hono()
           // Save verification documents if provided
           if (verificationDocuments && verificationDocuments.length > 0) {
             for (const documentUrl of verificationDocuments) {
-              const ipfsHash = documentUrl.split('/').pop() || '';
+              const ipfsHash = documentUrl.split("/").pop() || "";
               db.query(
                 `
                  INSERT INTO lawyer_verification_documents (lawyer_account, document_url, document_type, file_name, ipfs_hash)
                  VALUES (?, ?, ?, ?, ?)
                `
-              ).run(user.id, documentUrl, 'verification', 'verification_document', ipfsHash);
+              ).run(
+                user.id,
+                documentUrl,
+                "verification",
+                "verification_document",
+                ipfsHash
+              );
             }
           }
         })();
@@ -554,6 +567,62 @@ const lawyers = new Hono()
     async (ctx) => {
       try {
         const { currentSituation, futurePlans } = ctx.req.valid("json");
+
+        const validationAgent = new Agent({
+          preamble: `You are a legal query validation system. Your job is to determine if a client's query is genuine and relates to legal services, business, or professional needs that would require lawyer assistance.
+
+          Valid queries include:
+          - Legal issues, disputes, or concerns
+          - Business formation, contracts, compliance
+          - Personal legal matters (family, estate, immigration, etc.)
+          - Regulatory requirements or violations
+          - Property, employment, or financial legal needs
+          - Any situation requiring professional legal advice
+
+          Invalid queries include:
+          - General conversation or greetings
+          - Non-legal personal questions
+          - Technical support or non-legal advice
+          - Casual chat or social interaction
+          - Random or nonsensical text
+          - Questions unrelated to legal services
+
+          Analyze both the current situation and future plans to determine if this is a legitimate request for legal services.`,
+          model: "gemini-2.0-flash",
+        });
+
+        validationAgent.setResponseJsonSchema({
+          type: "object",
+          properties: {
+            isValid: {
+              type: "boolean",
+              description: "Whether this is a valid legal services query",
+            },
+            reason: {
+              type: "string",
+              description:
+                "Brief explanation of why the query is valid or invalid",
+            },
+          },
+          required: ["isValid", "reason"],
+        });
+
+        const validationPrompt = `
+Current Situation: ${currentSituation}
+Future Plans: ${futurePlans}
+
+Is this a legitimate request for legal services that would benefit from lawyer consultation?
+        `.trim();
+
+        const validation = await validationAgent.prompt(validationPrompt);
+
+        if (!validation.isValid) {
+          return respond.err(
+            ctx,
+            "Please provide a valid legal query. Your request should describe a legal situation, business need, or professional matter that requires lawyer assistance.",
+            400
+          );
+        }
 
         const verifiedLawyers = db
           .query(
