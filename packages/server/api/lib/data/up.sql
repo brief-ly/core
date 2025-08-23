@@ -36,6 +36,7 @@ CREATE TABLE
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         group_name TEXT NOT NULL,
         reasoning TEXT NOT NULL,
+        escrow_contract_address TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -69,4 +70,30 @@ CREATE TABLE
         response TEXT NOT NULL CHECK (response IN ('accepted', 'rejected')),
         responded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE (request_id, lawyer_account)
+    );
+
+CREATE TABLE
+    IF NOT EXISTS group_documents (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        group_id INTEGER REFERENCES lawyer_groups (id) ON DELETE CASCADE,
+        lawyer_account INTEGER REFERENCES account (id) ON DELETE CASCADE,
+        contract_document_id INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        document_hash TEXT NOT NULL,
+        ipfs_hash TEXT NOT NULL,
+        encryption_key TEXT NOT NULL,
+        payment_required INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'locked' CHECK (status IN ('locked', 'unlocked')),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        unlocked_at TIMESTAMP
+    );
+
+CREATE TABLE
+    IF NOT EXISTS document_access_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        document_id INTEGER REFERENCES group_documents (id) ON DELETE CASCADE,
+        account_id INTEGER REFERENCES account (id) ON DELETE CASCADE,
+        access_type TEXT NOT NULL CHECK (access_type IN ('view', 'download')),
+        accessed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
