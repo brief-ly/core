@@ -109,3 +109,21 @@ CREATE TABLE
         ipfs_hash TEXT NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
+
+CREATE TABLE
+    IF NOT EXISTS group_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        group_id INTEGER REFERENCES lawyer_groups (id) ON DELETE CASCADE,
+        sender_account INTEGER REFERENCES account (id) ON DELETE CASCADE,
+        message_type TEXT NOT NULL DEFAULT 'text' CHECK (message_type IN ('text', 'document', 'system')),
+        message_content TEXT NOT NULL,
+        document_id INTEGER REFERENCES group_documents (id) ON DELETE SET NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+CREATE INDEX IF NOT EXISTS idx_group_messages_group_id ON group_messages (group_id);
+
+CREATE INDEX IF NOT EXISTS idx_group_messages_created_at ON group_messages (created_at);
+
+CREATE INDEX IF NOT EXISTS idx_group_messages_sender ON group_messages (sender_account);
