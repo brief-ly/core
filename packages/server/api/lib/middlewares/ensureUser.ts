@@ -33,8 +33,6 @@ const ensureUser = createMiddleware<{
     user = result;
   }
 
-  console.log({ user });
-
   ctx.set(
     "user",
     z

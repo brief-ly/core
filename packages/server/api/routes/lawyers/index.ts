@@ -31,6 +31,7 @@ const lawyers = new Hono()
       })
     ),
     async (ctx) => {
+      
       try {
         const user = ctx.get("user");
         const {
@@ -103,7 +104,7 @@ const lawyers = new Hono()
           201
         );
       } catch (error) {
-        console.error("Error submitting lawyer application:", error);
+        console.log(error);
         return respond.err(ctx, "Failed to submit lawyer application", 500);
       }
     }

@@ -21,6 +21,9 @@ export default function Onboarding() {
   const { submitLawyerApplication, uploadFile } = useApi();
   const [submitSuccess, setSubmitSuccess] = useState(false);
 
+  const { data: statusData, isSuccess: isStatusSuccess } = useApi().getLawyerApplicationStatus();
+  console.log({ statusData, isStatusSuccess });
+
   const handleFormSubmit = async (data: OnboardingFormData) => {
     try {
       // Upload profile photo if it exists
